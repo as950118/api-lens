@@ -1,0 +1,17 @@
+{
+  "name": "@apilens/extractor-typescript",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "@apilens/core": "^0.1.0",
+    "ts-morph": "^28.0.0"
+  }
+}

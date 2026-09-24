@@ -1,0 +1,23 @@
+{
+  "name": "apilens-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ApiLens - detect frontend regressions caused by backend API changes",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b packages/cli",
+    "clean": "tsc -b packages/cli --clean",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.6",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.1"
+  }
+}

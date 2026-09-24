@@ -1,0 +1,5 @@
+{
+  "apiClientMap": {
+    "productApi.getProduct": { "method": "GET", "path": "/products/{id}" }
+  }
+}

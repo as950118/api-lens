@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.apilens/
+*.db
+*.db-journal
+coverage/
+.DS_Store
