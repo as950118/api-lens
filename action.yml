@@ -1,0 +1,81 @@
+name: ApiLens
+description: Find frontend code affected by backend API changes, and check changed frontend code against the real API
+author: ApiLens
+branding:
+  icon: eye
+  color: blue
+
+inputs:
+  frontend:
+    description: Frontend (TypeScript) project directory
+    required: true
+  backend:
+    description: Backend (Spring Boot) project directory
+    required: true
+  base:
+    description: Git ref to compare against (default for pull requests is the base branch)
+    required: false
+    default: ""
+  fail-on:
+    description: "Fail when backend changes have frontend impact at this confidence: definite | likely | possible | never"
+    required: false
+    default: definite
+  check-fail-on:
+    description: "Fail when changed frontend code violates the contract at this level: error | warning | never"
+    required: false
+    default: error
+  comment:
+    description: Post (or update) the report as a pull request comment
+    required: false
+    default: "true"
+  node-version:
+    required: false
+    default: "22"
+  java-version:
+    required: false
+    default: "17"
+
+outputs:
+  report:
+    description: Path of the Markdown report
+    value: ${{ steps.apilens.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+    - name: Build ApiLens
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        npm ci --no-audit --no-fund
+        npm run build:jar
+        npm run build
+    - name: Run ApiLens
+      id: apilens
+      shell: bash
+      env:
+        APILENS_FRONTEND: ${{ inputs.frontend }}
+        APILENS_BACKEND: ${{ inputs.backend }}
+        APILENS_BASE: ${{ inputs.base || format('origin/{0}', github.base_ref) }}
+        APILENS_FAIL_ON: ${{ inputs.fail-on }}
+        APILENS_CHECK_FAIL_ON: ${{ inputs.check-fail-on }}
+        APILENS_OUT: ${{ runner.temp }}/apilens
+      run: |
+        echo "report=$APILENS_OUT/report.md" >> "$GITHUB_OUTPUT"
+        "${{ github.action_path }}/scripts/apilens-ci.sh"
+    - name: Comment on the pull request
+      if: always() && inputs.comment == 'true' && github.event_name == 'pull_request' && steps.apilens.outputs.report != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPORT: ${{ steps.apilens.outputs.report }}
+      run: |
+        [ -f "$REPORT" ] || exit 0
+        gh pr comment "${{ github.event.pull_request.number }}" --body-file "$REPORT" --edit-last --create-if-none

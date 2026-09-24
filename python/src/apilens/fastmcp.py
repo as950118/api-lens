@@ -40,6 +40,15 @@ def register_tools(mcp: Any, lens: ApiLens | None = None, *, prefix: str = "", *
         Limit to changed code with `files` or `changed_since`. Returns PASS/WARNING/FAIL with file:line evidence."""
         return lens.check(files=files, changed_since=changed_since)
 
+    def analyze_api_changes(save: bool = False, format: Literal["json", "markdown"] = "json") -> Any:
+        """Diff the backend contract stored in the index with the backend sources now, and list every frontend
+        location affected by each breaking change (DEFINITE / LIKELY / POSSIBLE). `save` makes it the new baseline."""
+        return lens.analyze(save=save, format=format)
+
+    def diff_api_changes(base: str, head: str | None = None, format: Literal["json", "markdown"] = "json") -> Any:
+        """Compare the backend API at two git refs (head omitted = working tree) and list affected frontend code."""
+        return lens.diff(base, head, format=format)
+
     def impact_of_api(api: str, graph: GraphMode = "none") -> list[dict[str, Any]]:
         """Everything in the frontend that depends on an API (e.g. "GET /users/{id}"), without changing anything:
         call sites, response fields read and where, files and components."""
@@ -77,6 +86,8 @@ def register_tools(mcp: Any, lens: ApiLens | None = None, *, prefix: str = "", *
         (index_frontend, False),
         (extract_backend, False),
         (check_contract, True),
+        (analyze_api_changes, False),
+        (diff_api_changes, True),
         (impact_of_api, True),
         (impact_of_file, True),
         (impact_of_field, True),

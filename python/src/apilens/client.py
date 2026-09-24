@@ -70,6 +70,40 @@ class ApiLens:
         """Extract the Spring Boot API contract (endpoints, DTOs) into the index."""
         return self._run(["extract-backend", self._dir(backend_dir, self.backend_dir, "backend_dir"), "--format", "json"])
 
+    # ------------------------------------------------------------------ API changes
+
+    def analyze(
+        self,
+        backend_dir: str | os.PathLike[str] | None = None,
+        *,
+        save: bool = False,
+        format: Literal["json", "markdown"] = "json",
+    ) -> Any:
+        """Diff the stored backend contract against `backend_dir` now and grade the affected frontend code."""
+        args = ["analyze", "--backend", self._dir(backend_dir, self.backend_dir, "backend_dir"), "--fail-on", "never"]
+        if save:
+            args.append("--save")
+        return self._report(args, format)
+
+    def diff(
+        self,
+        base: str,
+        head: str | None = None,
+        *,
+        backend_dir: str | os.PathLike[str] | None = None,
+        format: Literal["json", "markdown"] = "json",
+    ) -> Any:
+        """Backend API changes between two git refs (head omitted = working tree) and the frontend code they affect."""
+        args = ["diff", "--base", base, "--backend", self._dir(backend_dir, self.backend_dir, "backend_dir"), "--fail-on", "never"]
+        if head:
+            args += ["--head", head]
+        return self._report(args, format)
+
+    def _report(self, args: list[str], format: str) -> Any:
+        if format == "markdown":
+            return self._run_text([*args, "--format", "markdown"])
+        return self._run([*args, "--format", "json"])
+
     # ------------------------------------------------------------------ queries
 
     def check(self, *, files: Sequence[str] | None = None, changed_since: str | None = None) -> dict[str, Any]:

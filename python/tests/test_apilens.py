@@ -52,6 +52,13 @@ class TestWithBackend:
         assert any(hit["label"] == "UserCard" for hit in lens.search("UserCard"))
         assert "GET /users/summary" in lens.summary()["unusedEndpoints"]
 
+    def test_backend_changes(self, lens, lens_options):
+        report = lens.analyze(lens_options["backend_dir"].parent / "backend-v2")
+        assert report["result"] == "FAIL"
+        assert report["counts"]["DEFINITE"] == 9
+        markdown = lens.analyze(lens_options["backend_dir"].parent / "backend-v2", format="markdown")
+        assert markdown.startswith("## ApiLens: backend API change report: FAIL")
+
     def test_render_graph(self, lens, tmp_path):
         assert lens.render_graph(api="GET /products/{id}").startswith("flowchart LR")
         path = lens.render_graph("html", out=tmp_path / "graph.html")
@@ -68,7 +75,7 @@ class TestWithBackend:
             return "ok"
 
         names = register_tools(mcp, lens, prefix="apilens_")
-        assert len(names) == 9
+        assert len(names) == 11
 
         async def run():
             async with fastmcp.Client(mcp) as client:

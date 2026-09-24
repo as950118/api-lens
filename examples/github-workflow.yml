@@ -1,0 +1,21 @@
+# .github/workflows/apilens.yml in the repository containing your frontend and backend.
+name: ApiLens
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write # for the report comment
+
+jobs:
+  apilens:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # ApiLens reads the backend at the base ref
+      - uses: <owner>/api-lens@v1
+        with:
+          frontend: frontend
+          backend: backend

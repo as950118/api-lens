@@ -6,12 +6,16 @@ import {
   mergeGraphs,
   renderHtml,
   renderMermaid,
+  renderChangeReportMarkdown,
+  renderContractReportMarkdown,
+  type ChangeReport,
   type ContractReport,
   type GraphAttachment,
   type ImpactGraph,
 } from "@apilens/core";
 import {
   formatApiImpact,
+  formatChangeReport,
   formatBackendResult,
   formatContractReport,
   formatFieldImpact,
@@ -22,7 +26,8 @@ import {
 } from "./format.js";
 import { ApiLensWorkspace, DEFAULT_INDEX_PATH } from "./workspace.js";
 
-type Format = "text" | "json" | "mermaid" | "html";
+type Format = "text" | "json" | "mermaid" | "html" | "markdown";
+type ImpactFailOn = "definite" | "likely" | "possible" | "never";
 type FailOn = "error" | "warning" | "never";
 
 const formatOption = (choices: Format[], fallback: Format) =>
@@ -90,11 +95,18 @@ export function buildProgram(): Command {
     .description("Check frontend API usage against the backend contract (endpoints, methods, fields, params)")
     .option("--files <files...>", "only APIs used by these files")
     .option("--changed-since <ref>", "only APIs used by TS files changed since this git ref")
-    .addOption(formatOption(["text", "json"], "text"))
+    .addOption(formatOption(["text", "json", "markdown"], "text"))
     .addOption(failOnOption())
-    .action((opts: { files?: string[]; changedSince?: string; format: Format; failOn: FailOn }) => {
+    .option("-o, --out <path>", "write the report to a file")
+    .action((opts: { files?: string[]; changedSince?: string; format: Format; failOn: FailOn; out?: string }) => {
       const report = workspace().check({ files: opts.files, changedSince: opts.changedSince });
-      console.log(opts.format === "json" ? JSON.stringify(report, null, 2) : formatContractReport(report));
+      const output =
+        opts.format === "json"
+          ? JSON.stringify(report, null, 2)
+          : opts.format === "markdown"
+            ? renderContractReportMarkdown(report)
+            : formatContractReport(report);
+      emit(output, opts.out);
       setExitCode(report, opts.failOn);
     });
 
@@ -167,22 +179,74 @@ export function buildProgram(): Command {
       emit(render(opts.format, { value: graph, text: "", graph, title: "ApiLens impact graph" }), out);
     });
 
-  for (const [name, phase, description] of [
-    ["analyze", 5, "Analyze backend API changes against the frontend index"],
-    ["diff", 7, "Detect changed APIs between two git revisions"],
-    ["verify", 6, "Run static analysis + AI verification"],
-  ] as const) {
-    program
-      .command(name)
-      .description(`${description} (not implemented yet - Phase ${phase})`)
-      .allowUnknownOption()
-      .action(() => {
-        console.error(`apilens ${name} is not implemented yet (planned for Phase ${phase}).`);
-        process.exitCode = 2;
-      });
-  }
+  const impactFailOn = () =>
+    new Option("--fail-on <level>", "exit with code 1 when frontend impact at this confidence (or higher) exists")
+      .choices(["definite", "likely", "possible", "never"])
+      .default("definite");
+
+  program
+    .command("analyze")
+    .description("Diff the backend contract in the index against a backend directory and find affected frontend code")
+    .requiredOption("--backend <dir>", "backend project root with the changed API")
+    .option("--save", "store the analyzed backend as the new baseline")
+    .option("--jar <path>", "Java extractor JAR (defaults to the bundled one)")
+    .addOption(formatOption(["text", "json", "markdown"], "text"))
+    .addOption(impactFailOn())
+    .option("-o, --out <path>", "write the report to a file")
+    .action(async (opts: { backend: string; save?: boolean; jar?: string; format: Format; failOn: ImpactFailOn; out?: string }) => {
+      const report = await workspace().analyzeBackend(opts.backend, { save: opts.save, jarPath: opts.jar });
+      emit(renderChanges(report, opts.format), opts.out);
+      setImpactExitCode(report, opts.failOn);
+    });
+
+  program
+    .command("diff")
+    .description("Compare the backend API between two git refs and find affected frontend code")
+    .requiredOption("--base <ref>", "git ref the frontend was written against, e.g. origin/main")
+    .option("--head <ref>", "git ref with the backend change (default: the working tree)")
+    .requiredOption("--backend <dir>", "backend project root (inside the git repository)")
+    .option("--jar <path>", "Java extractor JAR (defaults to the bundled one)")
+    .addOption(formatOption(["text", "json", "markdown"], "text"))
+    .addOption(impactFailOn())
+    .option("-o, --out <path>", "write the report to a file")
+    .action(async (opts: { base: string; head?: string; backend: string; jar?: string; format: Format; failOn: ImpactFailOn; out?: string }) => {
+      const report = await workspace().diffBackend(opts.backend, { base: opts.base, head: opts.head, jarPath: opts.jar });
+      if (!report.backendChanged && opts.format === "text") {
+        emit(`No backend changes under ${opts.backend} between ${report.base} and ${report.head}.`, opts.out);
+        return;
+      }
+      emit(
+        renderChanges(report, opts.format, `ApiLens: backend API changes ${report.base}...${report.head}`),
+        opts.out,
+      );
+      setImpactExitCode(report, opts.failOn);
+    });
+
+  program
+    .command("verify")
+    .description("Run static analysis + AI verification (not implemented yet - Phase 6)")
+    .allowUnknownOption()
+    .action(() => {
+      console.error("apilens verify is not implemented yet (planned for Phase 6).");
+      process.exitCode = 2;
+    });
 
   return program;
+}
+
+function renderChanges(report: ChangeReport, format: Format, title?: string): string {
+  if (format === "json") return JSON.stringify(report, null, 2);
+  if (format === "markdown") return renderChangeReportMarkdown(report, title);
+  return formatChangeReport(report);
+}
+
+function setImpactExitCode(report: ChangeReport, failOn: ImpactFailOn): void {
+  const c = report.counts;
+  const failing =
+    (failOn === "definite" && c.DEFINITE > 0) ||
+    (failOn === "likely" && c.DEFINITE + c.LIKELY > 0) ||
+    (failOn === "possible" && c.DEFINITE + c.LIKELY + c.POSSIBLE > 0);
+  if (failing) process.exitCode = 1;
 }
 
 function render(

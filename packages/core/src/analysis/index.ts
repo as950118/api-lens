@@ -4,3 +4,5 @@ export * from "./type-path.js";
 export * from "./contract.js";
 export * from "./graph.js";
 export * from "./impact.js";
+export * from "./diff.js";
+export * from "./change-impact.js";

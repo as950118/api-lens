@@ -1,6 +1,8 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
+  analyzeChangeImpact,
   checkContract,
   ImpactAnalyzer,
   IndexStore,
@@ -8,12 +10,14 @@ import {
   ProjectModel,
   type ApilensConfig,
   type ApiUsage,
+  type BackendManifest,
+  type ChangeReport,
   type ContractReport,
   type FrontendIndexUpdate,
 } from "@apilens/core";
 import { JavaExtractor } from "@apilens/extractor-java";
 import { TypeScriptProject } from "@apilens/extractor-typescript";
-import { changedSourceFiles } from "./git.js";
+import { changedSourceFiles, hasChangesBetween, materializeAtRef } from "./git.js";
 
 export const DEFAULT_INDEX_PATH = ".apilens/index.db";
 
@@ -49,6 +53,27 @@ export interface ExtractBackendResult {
   enums: number;
   warnings: string[];
   changedEndpoints: string[];
+}
+
+export interface AnalyzeBackendOptions {
+  /** Store the new contract as the baseline afterwards. */
+  save?: boolean;
+  jarPath?: string;
+}
+
+export interface DiffBackendOptions {
+  /** Git ref the frontend was written against, e.g. "origin/main". */
+  base: string;
+  /** Git ref with the backend change; the working tree when omitted. */
+  head?: string;
+  jarPath?: string;
+}
+
+export interface GitChangeReport extends ChangeReport {
+  base: string;
+  head: string;
+  /** False when nothing under the backend directory changed between the refs (analysis skipped). */
+  backendChanged: boolean;
 }
 
 export interface CheckOptions {
@@ -105,6 +130,55 @@ export class ApiLensWorkspace {
       warnings: manifest.warnings,
       changedEndpoints: update.changedEndpoints,
     };
+  }
+
+  /** Phase 4+5: diff the stored backend contract against `backendDir` now, and find affected frontend code. */
+  async analyzeBackend(backendDir: string, options: AnalyzeBackendOptions = {}): Promise<ChangeReport> {
+    const root = resolve(backendDir);
+    if (!existsSync(root)) throw new Error(`Backend directory not found: ${root}`);
+    const { frontend, before, config } = this.withStore((store) => ({
+      frontend: store.readFrontendManifest(),
+      before: store.readBackendManifest(),
+      config: this.configPath ? loadConfig(this.configPath) : store.readConfig(),
+    }));
+    if (!frontend) throw new Error(`No frontend index in ${this.indexPath}. Run \`apilens index <frontendDir>\` first.`);
+    if (!before) {
+      throw new Error("No baseline backend contract in the index. Run `apilens extract-backend <dir>` on the current backend first.");
+    }
+    const after = await new JavaExtractor({ jarPath: options.jarPath }).extract(root);
+    const report = analyzeChangeImpact(frontend, before, after, config);
+    if (options.save) this.withStore((store) => store.writeBackendManifest(after));
+    return report;
+  }
+
+  /** Phase 7: compare the backend at two git refs and find affected frontend code. */
+  async diffBackend(backendDir: string, options: DiffBackendOptions): Promise<GitChangeReport> {
+    const root = resolve(backendDir);
+    const head = options.head ?? "working tree";
+    const model = this.model();
+    const refs = { base: options.base, head };
+    if (!hasChangesBetween(root, options.base, options.head)) {
+      return {
+        ...refs,
+        backendChanged: false,
+        result: "PASS",
+        endpoints: [],
+        counts: { changedApis: 0, breakingChanges: 0, DEFINITE: 0, LIKELY: 0, POSSIBLE: 0 },
+      };
+    }
+    const scratch = mkdtempSync(join(tmpdir(), "apilens-diff-"));
+    try {
+      const extractor = new JavaExtractor({ jarPath: options.jarPath });
+      const beforeDir = materializeAtRef(root, options.base, join(scratch, "base"));
+      const afterDir = options.head ? materializeAtRef(root, options.head, join(scratch, "head")) : root;
+      const [before, after]: BackendManifest[] = await Promise.all([
+        extractor.extract(beforeDir),
+        extractor.extract(afterDir),
+      ]);
+      return { ...refs, backendChanged: true, ...analyzeChangeImpact(model.frontend, before, after, model.config) };
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   }
 
   model(): ProjectModel {

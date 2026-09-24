@@ -106,9 +106,68 @@ apilens impact --api "GET /users/{id}" -f mermaid              # PR 코멘트용
 HTML 그래프는 API → 응답 필드 → 함수/컴포넌트 → 파일의 계층 그래프다. 노드를 클릭하면 연결된 전체를 추적하고,
 검색과 종류 필터, 검색 가능한 목록을 제공한다. 외부 리소스 없이 단일 파일로 동작한다.
 
-### 5. MCP / 라이브러리
+### 5. Backend API 변경 → Frontend 영향
 
-같은 기능을 MCP tool로 제공한다. tool: `index_frontend`, `extract_backend`, `check_contract`, `impact_of_api`,
+```bash
+# index에 저장된 계약(= frontend가 작성된 기준)과 지금의 backend 소스를 비교
+apilens analyze --backend ./backend               # --save 로 새 계약을 기준으로 저장
+# git ref 두 개를 비교 (head 생략 = working tree). backend가 안 바뀌었으면 바로 PASS
+apilens diff --base origin/main --backend ./backend -f markdown -o api-changes.md
+```
+
+```text
+ApiLens API change report: FAIL
+
+Changed APIs: 8   Breaking changes: 35   Frontend impact: 9 definite, 2 likely, 4 possible
+
+GET /users/{id}  [changed]  FAIL
+  ! Response field `name` was removed
+  ! Response `age` type changed: int → String
+  ! Response field `profile.email` may now be null
+  ! Response `tags` changed from an array to an object/value (String[] → String)
+    Response field `username` was added
+  Related files: 4   Definite: 4   Likely: 1   Possible: 3
+    DEFINITE src/components/UserCard.tsx:4  UserCard  user.name
+             Reads `name`; `name` was removed from the response
+    LIKELY   src/pages/User.tsx:19  UserPage  user.age
+             Uses `age`, which may now be null; Reads `age`; `age` changed int → String
+    POSSIBLE src/pages/User.tsx:30  loadProfile  value.name
+             Reads `name`; ... (value passed through a function ApiLens could not follow)
+
+PUT /users/{id}  [moved → PUT /users/{id}/profile]  FAIL
+    DEFINITE src/api/user.ts:12  userApi.updateUser  api.put(`/users/${id}`, body)
+```
+
+감지하는 변경: endpoint 추가/삭제/이동(같은 handler), parameter 추가·삭제·타입·필수 여부, request body와 그 필드
+(필수 필드 추가 등), response 필드 삭제·타입 변경(JSON 타입이 같으면 non-breaking)·nullable 변경·배열↔객체 변경,
+enum 값 추가·삭제. 영향은 `DEFINITE`(확실) / `LIKELY`(대부분 깨짐) / `POSSIBLE`(연결은 있으나 증명 불가)로 나뉜다.
+`--fail-on definite|likely|possible|never`(기본 definite), `--format text|json|markdown`.
+
+### 6. CI/CD
+
+GitHub Actions (이 저장소의 composite action, `examples/github-workflow.yml`):
+
+```yaml
+on: pull_request
+permissions: { contents: read, pull-requests: write }
+jobs:
+  apilens:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: <owner>/api-lens@v1
+        with: { frontend: frontend, backend: backend }
+```
+
+PR마다 (1) backend API 변경이 영향을 주는 frontend 코드, (2) 변경된 frontend 파일의 계약 위반을 검사해서 job summary와
+PR 코멘트(갱신)로 남기고, 기준 이상이면 job을 실패시킨다. 다른 CI에서는 `scripts/apilens-ci.sh`를 그대로 쓴다
+(`APILENS_FRONTEND`, `APILENS_BACKEND`, `APILENS_BASE`, `APILENS_FAIL_ON`, `APILENS_CHECK_FAIL_ON`).
+
+### 7. MCP / 라이브러리
+
+같은 기능을 MCP tool로 제공한다. tool: `index_frontend`, `extract_backend`, `check_contract`,
+`analyze_api_changes`, `diff_api_changes`, `impact_of_api`,
 `impact_of_file`, `impact_of_field`, `search`, `impact_summary`, `render_graph`.
 
 **독립 MCP 서버 (stdio)** — Claude Desktop / Claude Code 등에 바로 연결:
@@ -172,13 +231,13 @@ register_tools(mcp, frontend_dir="./frontend", backend_dir="./backend", prefix="
 | 1 | TypeScript AST 분석 + Index | ✅ |
 | 2 | Java Spring API 분석 (JavaParser) | ✅ |
 | 3 | Backend API ↔ Frontend 호출 연결, contract check, incremental index, 영향 범위 탐색·그래프 | ✅ |
-| 4 | API 변경 감지 | |
-| 5 | Static impact analysis | |
+| 4 | API 변경 감지 | ✅ |
+| 5 | Static impact analysis (DEFINITE / LIKELY / POSSIBLE) | ✅ |
 | 6 | AI verification | |
-| 7 | Git diff / CI integration | |
+| 7 | Git diff / CI integration (GitHub Action, CI script, Markdown 리포트) | ✅ |
 | - | Library API / MCP (stdio 서버, TS fastmcp, Python FastMCP) | ✅ |
 
-`apilens analyze`, `apilens diff`, `apilens verify`는 커맨드만 등록되어 있고 아직 동작하지 않는다.
+`apilens verify`(AI 검증, Phase 6)는 커맨드만 등록되어 있고 아직 동작하지 않는다.
 
 ## 새 언어 추가
 

@@ -199,32 +199,45 @@ upsert/delete하고, 영향받은 **파일 목록**을 돌려준다. ID는 위�
 코드는 같은 row로 유지된다. 분석 자체는 cross-file 흐름(wrapper, JSX props) 때문에 프로젝트 전체를 대상으로 하되,
 `TypeScriptProject.refresh(files)`로 바뀐 파일만 다시 읽는다(MCP 같은 상주 프로세스에서 AST 재사용).
 
-## 8. API change detection (Phase 4)
+## 8. API change detection (Phase 4, 구현됨)
 
-두 시점의 `BackendManifest`(git base/head 각각에서 Java extractor 실행)를 `METHOD + normalized path` 기준으로 비교한다.
+`core/src/analysis/diff.ts` — `diffBackends(before, after)`
 
-- Endpoint: ADDED / REMOVED / CHANGED
-- Request: parameter added / removed / type changed / required↔optional
-- Response: field added / removed / type changed / nullable changed / array↔object
+두 `BackendManifest`를 endpoint id(`METHOD path`)로 맞추고 타입을 재귀적으로 비교한다. 제네릭은 양쪽에서 각각
+치환하고 순환 DTO는 방문 집합으로 멈춘다. 모든 변경은 frontend index와 같은 **body 기준 path**(`data.[].name`,
+`"[]"` 배열 원소, `"*"` map 값)로 표현된다.
 
-DTO는 재귀적으로 비교해 변경을 **response body 기준 path**(`["profile","email"]`)로 표현한다. Frontend index의 path와 같은 좌표계다.
+| 대상 | 변경 | breaking (frontend 관점) |
+|---|---|---|
+| endpoint | removed / moved(같은 handler의 path 변경) / added | removed, moved |
+| parameter | added / removed / type / optional→required | 필수 추가, 필수화, JSON 타입 변경 |
+| request body | added / removed, 필드 added(필수) / removed / nullable→non-null | 필수 필드 추가·필수화 (삭제는 Jackson 기본 설정상 무해) |
+| response | 필드 removed / type / nullable / 배열↔객체 / enum 값 | 삭제, JSON 타입 변경, nullable화, shape 변경, enum 값 삭제 |
 
-## 9. Static impact analysis (Phase 5)
+타입 비교는 JSON 수준 범주(number / string / boolean / object / array)로 breaking 여부를 판단한다.
+`Integer → Long`은 변경으로 기록하되 breaking이 아니다.
 
-변경된 endpoint마다:
+## 9. Static impact analysis (Phase 5, 구현됨)
 
-1. `findApiCallsByEndpoint(method, pattern)` → 호출부
-2. `findPropertyAccessesForApiCall(id)` → 필드 접근
-3. 변경 path와 접근 path 비교 (`"[]"` segment는 배열 원소로 정렬)
+`core/src/analysis/change-impact.ts` — `analyzeChangeImpact(frontend, before, after)`
 
-| 조건 | 판정 |
-|---|---|
-| 제거/타입 변경된 필드의 path와 접근 path가 일치, `flow = direct` | DEFINITE |
-| 일치하지만 nullable 변경 등 runtime 영향이 조건부 | LIKELY |
-| `flow = derived`이고 필드명이 일치 | POSSIBLE |
-| 접근 path가 변경과 무관 | UNRELATED |
+frontend 호출은 **before** 계약에 연결한다(코드가 작성된 기준). breaking 변경마다 해당 endpoint의 호출/필드 읽기를
+path로 매칭해 등급을 매긴다.
 
-모든 finding에는 endpoint → caller function → file:line → code가 남는다.
+| 변경 | DEFINITE | LIKELY | POSSIBLE |
+|---|---|---|---|
+| endpoint 삭제 | 모든 호출 | | |
+| endpoint 이동 | URL을 직접 쓰는 호출 | | client 함수를 거치는 호출 |
+| 필드 삭제 | 그 path(이하)를 읽음 | | 추적 불가 함수를 거쳐 읽음(`derived`) |
+| 타입 변경 | | 그 path를 읽음 | derived |
+| 배열↔객체 | 그 아래를 읽음 (`tags[0]`, `tags.length`) | 값 자체를 사용 | derived |
+| nullable화 | | 그 아래를 읽음 (`profile.email`) | 값 자체를 사용 |
+| enum 값 삭제 | | | 그 필드를 읽음 |
+| 필수 param/body 필드 추가 | 보내지 않음이 확인됨 | | request key를 정적으로 알 수 없음 |
+
+같은 위치에 여러 변경이 걸리면 한 항목으로 합치고(가장 높은 등급 + 모든 이유), endpoint와 전체 결과는
+DEFINITE가 있으면 `FAIL`, LIKELY/POSSIBLE만 있으면 `WARNING`, 없으면 `PASS`. Text / JSON / Markdown(PR 코멘트용,
+`core/src/report/markdown.ts`)으로 출력한다.
 
 ## 10. AI verification interface (Phase 6)
 
@@ -315,13 +328,19 @@ endpoint ──has-field──▶ field ──reads──▶ reading fn/componen
 - 상주 프로세스(MCP)에서는 workspace가 `TypeScriptProject`를 유지하므로 `index_frontend(files=...)`가 바뀐 파일만 다시 읽는다.
 - impact 결과의 graph는 `graph: none | mermaid | json`으로 크기를 조절한다(LLM에는 mermaid가 간결).
 
-## 13. CI/CD (Phase 7)
+## 13. CI/CD (Phase 7, 구현됨)
 
 ```text
-git push → CI → apilens diff --base <base> --head HEAD
-         → 변경 endpoint → frontend index 조회 → static analysis → (optional) AI
-         → report (텍스트/Markdown/JSON) → exit code: PASS 0 / WARNING 0 또는 설정 / FAIL 1
+git push / PR → CI
+  apilens index <frontend>
+  apilens diff --base <base> --backend <backend>          backend at base vs head (git archive, 작업 트리 불변)
+      └─ backend 변경 없음 → 즉시 PASS (추출 생략)
+  apilens extract-backend <backend>
+  apilens check --changed-since <base>                    바뀐 frontend 파일 vs 새 계약
+  → report.md (job summary + PR 코멘트) → exit 1 (fail-on 기준)
 ```
 
-- Frontend index는 frontend CI에서 `apilens index`로 생성해 artifact로 올리고, backend CI에서 내려받아 사용한다.
-- AI 검증은 API key가 있을 때만 동작하며, 없으면 정적 분석 결과만으로 판정한다.
+- `scripts/apilens-ci.sh`: 위 흐름 전체. 환경 변수만으로 설정하므로 어떤 CI에서도 사용 가능.
+- `action.yml`: Node/Java 설정 → ApiLens 빌드 → 스크립트 실행 → PR 코멘트 갱신(`gh pr comment --edit-last --create-if-none`).
+- `--fail-on`: 변경 영향은 `definite|likely|possible|never`, 계약 검사는 `error|warning|never`.
+- AI 검증(Phase 6)은 API key가 있을 때만 켜지는 추가 단계로 붙일 예정이며, 없으면 정적 분석 결과만으로 판정한다.

@@ -19,7 +19,9 @@ const bin = join(repoRoot, "packages/mcp/dist/bin.js");
 const hasJar = existsSync(DEFAULT_JAR_PATH);
 
 const TOOL_NAMES = [
+  "analyze_api_changes",
   "check_contract",
+  "diff_api_changes",
   "extract_backend",
   "impact_of_api",
   "impact_of_field",
@@ -47,7 +49,7 @@ describe("createApiLensTools", () => {
     const tools = createApiLensTools();
     expect(tools.map((t) => t.name).sort()).toEqual(TOOL_NAMES);
     const readOnly = tools.filter((t) => t.readOnly).map((t) => t.name).sort();
-    expect(readOnly).toEqual(["check_contract", "impact_of_api", "impact_of_field", "impact_of_file", "impact_summary", "search"]);
+    expect(readOnly).toEqual(["check_contract", "diff_api_changes", "impact_of_api", "impact_of_field", "impact_of_file", "impact_summary", "search"]);
     expect(tools.find((t) => t.name === "impact_of_api")!.parameters.parse({ api: "GET /x" })).toEqual({
       api: "GET /x",
       graph: "none",
@@ -79,6 +81,13 @@ describe("createApiLensTools", () => {
     expect(impact.files).toHaveLength(4);
     expect(impact).not.toHaveProperty("graph");
     expect(String(impact.mermaid)).toMatch(/^flowchart LR/);
+
+    const changes = (await tools.analyze_api_changes.run({
+      backendDir: join(fixtures, "backend-v2"),
+      format: "markdown",
+    })) as { result: string; markdown: string };
+    expect(changes.result).toBe("FAIL");
+    expect(changes.markdown).toContain("moved → `PUT /users/{id}/profile`");
 
     const html = (await tools.render_graph.run({ format: "html", outPath: join(dir, "g.html") })) as { path: string };
     expect(existsSync(html.path)).toBe(true);

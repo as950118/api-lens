@@ -1,5 +1,6 @@
 import type {
   ApiImpact,
+  ChangeReport,
   ContractReport,
   FieldImpact,
   FileImpact,
@@ -177,4 +178,26 @@ function who(fn: string | null, component: string | null): string {
 
 function plural(n: number): string {
   return n === 1 ? "" : "s";
+}
+
+export function formatChangeReport(report: ChangeReport): string {
+  const c = report.counts;
+  const lines = [
+    `ApiLens API change report: ${report.result}`,
+    "",
+    `Changed APIs: ${c.changedApis}   Breaking changes: ${c.breakingChanges}   Frontend impact: ${c.DEFINITE} definite, ${c.LIKELY} likely, ${c.POSSIBLE} possible`,
+  ];
+  for (const e of report.endpoints) {
+    lines.push("", `${e.endpointId}  [${e.movedTo ? `moved → ${e.movedTo}` : e.status}]  ${e.result}`);
+    for (const ch of e.changes) lines.push(`  ${ch.breaking ? "!" : " "} ${ch.message}`);
+    const sites = e.sites;
+    lines.push(
+      `  Related files: ${e.relatedFiles.length}   Definite: ${e.counts.DEFINITE}   Likely: ${e.counts.LIKELY}   Possible: ${e.counts.POSSIBLE}`,
+    );
+    for (const site of sites) {
+      lines.push(`    ${site.confidence.padEnd(8)} ${site.file}:${site.line}  ${who(site.functionName, site.component)}  ${site.code}`);
+      lines.push(`             ${site.reason}`);
+    }
+  }
+  return lines.join("\n");
 }

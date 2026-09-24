@@ -138,6 +138,74 @@ describe.skipIf(!hasJar || !existsSync(bin))("apilens CLI", () => {
     expect(readFileSync(html, "utf8")).toContain("<title>ApiLens impact graph</title>");
   });
 
+  it("reports frontend impact of backend changes and fails on definite impact", () => {
+    const text = run("analyze", "--backend", join(fixtures, "backend-v2"));
+    expect(text.status).toBe(1);
+    expect(text.stdout).toContain("ApiLens API change report: FAIL");
+    expect(text.stdout).toContain("PUT /users/{id}  [moved → PUT /users/{id}/profile]");
+    const report = JSON.parse(run("analyze", "--backend", join(fixtures, "backend-v2"), "-f", "json", "--fail-on", "never").stdout);
+    expect(report.counts).toMatchObject({ changedApis: 8, DEFINITE: 9, LIKELY: 2, POSSIBLE: 4 });
+    // The baseline is unchanged unless --save is given.
+    expect(run("analyze", "--backend", join(fixtures, "backend"), "-f", "json").status).toBe(0);
+  });
+
+  it("diffs the backend between git refs", () => {
+    const repo = join(dir, "diff-repo");
+    cpSync(join(fixtures, "frontend"), join(repo, "frontend"), { recursive: true });
+    cpSync(join(fixtures, "apilens.config.json"), join(repo, "frontend/apilens.config.json"));
+    cpSync(join(fixtures, "backend"), join(repo, "backend"), { recursive: true });
+    const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" });
+    const commit = (message: string) => {
+      git("add", "-A");
+      git("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", message);
+    };
+    git("init", "-q");
+    commit("v1");
+    rmSync(join(repo, "backend"), { recursive: true });
+    cpSync(join(fixtures, "backend-v2"), join(repo, "backend"), { recursive: true });
+    commit("v2");
+
+    const cli = (...args: string[]) =>
+      spawnSync(process.execPath, [bin, "-i", join(dir, "diff.db"), ...args], { encoding: "utf8" });
+    expect(cli("index", join(repo, "frontend")).status).toBe(0);
+
+    const md = cli("diff", "--base", "HEAD~1", "--head", "HEAD", "--backend", join(repo, "backend"), "-f", "markdown");
+    expect(md.status).toBe(1);
+    expect(md.stdout).toContain("## ApiLens: backend API changes HEAD~1...HEAD: FAIL");
+    expect(md.stdout).toContain("| DEFINITE | `src/components/UserCard.tsx:4` UserCard | `user.name` |");
+
+    const unchanged = cli("diff", "--base", "HEAD", "--backend", join(repo, "backend"));
+    expect(unchanged.status).toBe(0);
+    expect(unchanged.stdout).toContain("No backend changes");
+  });
+
+  it("runs the CI script: backend impact + changed-frontend contract check", () => {
+    const repo = join(dir, "ci-repo");
+    cpSync(join(fixtures, "frontend"), join(repo, "frontend"), { recursive: true });
+    cpSync(join(fixtures, "apilens.config.json"), join(repo, "frontend/apilens.config.json"));
+    cpSync(join(fixtures, "backend"), join(repo, "backend"), { recursive: true });
+    const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" });
+    git("init", "-q");
+    git("add", "-A");
+    git("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "base");
+
+    const script = join(repoRoot, "scripts/apilens-ci.sh");
+    const env = { ...process.env, APILENS_FRONTEND: "frontend", APILENS_BACKEND: "backend", APILENS_BASE: "HEAD", APILENS_OUT: join(repo, ".out") };
+    const clean = spawnSync("bash", [script], { cwd: repo, env, encoding: "utf8" });
+    expect(clean.status).toBe(0);
+    expect(readFileSync(join(repo, ".out/report.md"), "utf8")).toContain("frontend contract check: PASS");
+
+    const product = join(repo, "frontend/src/pages/Product.tsx");
+    writeFileSync(product, readFileSync(product, "utf8").replace("product.price", "product.cost"));
+    rmSync(join(repo, "backend"), { recursive: true });
+    cpSync(join(fixtures, "backend-v2"), join(repo, "backend"), { recursive: true });
+    const failing = spawnSync("bash", [script], { cwd: repo, env, encoding: "utf8" });
+    expect(failing.status).toBe(1);
+    const report = readFileSync(join(repo, ".out/report.md"), "utf8");
+    expect(report).toContain("backend API changes HEAD...working tree: FAIL");
+    expect(report).toContain("ProductResponse has no field `cost`");
+  });
+
   it("checks only the files changed since a git ref", () => {
     const frontend = copyFrontend("git");
     const git = (...args: string[]) => execFileSync("git", ["-C", frontend, ...args], { encoding: "utf8" });

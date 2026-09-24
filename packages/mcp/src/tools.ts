@@ -1,7 +1,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
-import { attachGraph, mergeGraphs, renderHtml, renderMermaid } from "@apilens/core";
+import {
+  attachGraph,
+  mergeGraphs,
+  renderChangeReportMarkdown,
+  renderHtml,
+  renderMermaid,
+  type ChangeReport,
+} from "@apilens/core";
 import { ApiLensWorkspace } from "@apilens/cli";
 
 export interface ApiLensToolOptions {
@@ -25,6 +32,11 @@ export interface ApiLensTool<Shape extends z.ZodRawShape = z.ZodRawShape> {
   /** Returns a JSON-serializable result. */
   run(args: z.infer<z.ZodObject<Shape>>): Promise<unknown>;
 }
+
+const reportFormat = z
+  .enum(["json", "markdown"])
+  .default("json")
+  .describe('"markdown" returns a PR-comment-ready report instead of the structured result');
 
 const graphOption = z
   .enum(["none", "mermaid", "json"])
@@ -75,6 +87,38 @@ export function createApiLensTools(options: ApiLensToolOptions = {}): ApiLensToo
       },
       readOnly: true,
       run: async (a) => ws.check({ files: a.files, changedSince: a.changedSince }),
+    }),
+    tool({
+      name: "analyze_api_changes",
+      title: "Analyze backend API changes",
+      description:
+        "Diff the backend contract stored in the index (what the frontend was built against) with the backend sources " +
+        "now, and list every frontend location affected by each breaking change, graded DEFINITE / LIKELY / POSSIBLE. " +
+        "Set `save` to make the new contract the baseline.",
+      parameters: {
+        backendDir: z.string().optional().describe("Backend root with the changes (defaults to the configured backend)"),
+        save: z.boolean().default(false),
+        format: reportFormat,
+      },
+      readOnly: false,
+      run: async (a) => report(await ws.analyzeBackend(backendDir(a.backendDir), { save: a.save }), a.format),
+    }),
+    tool({
+      name: "diff_api_changes",
+      title: "Backend API changes between git refs",
+      description:
+        "Compare the backend API at two git refs (e.g. base `origin/main`, head omitted = working tree) and list the " +
+        "frontend code affected by each breaking change. Skips extraction when the backend did not change.",
+      parameters: {
+        base: z.string().describe('Git ref the frontend was written against, e.g. "origin/main"'),
+        head: z.string().optional().describe("Git ref with the change (default: working tree)"),
+        backendDir: z.string().optional(),
+        format: reportFormat,
+      },
+      readOnly: true,
+      run: async (a) =>
+        report(await ws.diffBackend(backendDir(a.backendDir), { base: a.base, head: a.head }), a.format,
+          `ApiLens: backend API changes ${a.base}...${a.head ?? "working tree"}`),
     }),
     tool({
       name: "impact_of_api",
@@ -170,6 +214,10 @@ function tool<Shape extends z.ZodRawShape>(definition: {
     // Always reject asynchronously, even when argument defaults are missing.
     run: async (args: z.infer<z.ZodObject<Shape>>) => definition.run(args),
   } as unknown as ApiLensTool;
+}
+
+function report(value: ChangeReport, format: "json" | "markdown", title?: string) {
+  return format === "markdown" ? { result: value.result, markdown: renderChangeReportMarkdown(value, title) } : value;
 }
 
 function required(value: string | undefined, name: string): string {
