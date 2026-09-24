@@ -51,7 +51,7 @@ final class SpringEndpointExtractor {
     /** Handler parameters Spring injects itself; they are not part of the HTTP contract. */
     private static final Set<String> FRAMEWORK_TYPES = Set.of(
             "HttpServletRequest", "HttpServletResponse", "ServletRequest", "ServletResponse", "HttpSession",
-            "Principal", "Authentication", "Pageable", "Sort", "Model", "ModelMap", "BindingResult", "Errors",
+            "Principal", "Authentication", "Model", "ModelMap", "BindingResult", "Errors",
             "Locale", "TimeZone", "ZoneId", "WebRequest", "NativeWebRequest", "ServerWebExchange",
             "ServerHttpRequest", "ServerHttpResponse", "UriComponentsBuilder", "RedirectAttributes",
             "SessionStatus", "HttpMethod", "HttpHeaders", "InputStream", "OutputStream", "Reader", "Writer");
@@ -169,7 +169,19 @@ final class SpringEndpointExtractor {
                 .map(a -> Annotations.simpleName(a.getNameAsString()))
                 .anyMatch(name -> !PASSIVE_ANNOTATIONS.contains(name));
         if (hasBindingAnnotation) return List.of();
-        if (type instanceof ClassOrInterfaceType c && FRAMEWORK_TYPES.contains(c.getNameAsString())) return List.of();
+        if (type instanceof ClassOrInterfaceType c) {
+            // Spring Data binds these from ?page=&size=&sort=
+            if (c.getNameAsString().equals("Pageable")) {
+                return List.of(
+                        new ParamInfo("page", TypeRef.scalar("int"), false, "query"),
+                        new ParamInfo("size", TypeRef.scalar("int"), false, "query"),
+                        new ParamInfo("sort", TypeRef.scalar("String"), false, "query"));
+            }
+            if (c.getNameAsString().equals("Sort")) {
+                return List.of(new ParamInfo("sort", TypeRef.scalar("String"), false, "query"));
+            }
+            if (FRAMEWORK_TYPES.contains(c.getNameAsString())) return List.of();
+        }
 
         // No annotation: simple types bind as optional query params, objects bind each property (@ModelAttribute).
         TypeRef ref = types.map(type, scope);

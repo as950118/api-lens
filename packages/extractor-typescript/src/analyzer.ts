@@ -1,7 +1,13 @@
 import { Node, SyntaxKind, ts, type CallExpression, type SourceFile } from "ts-morph";
-import type { ApiCallResolution, DataFlowKind, HttpMethod } from "@apilens/core";
-import type { ApilensConfig } from "./config.js";
-import { normalizePath, resolveEndpointExpression } from "./endpoint.js";
+import {
+  normalizePath,
+  type ApiCallResolution,
+  type ApilensConfig,
+  type DataFlowKind,
+  type HttpMethod,
+  type RequestShape,
+} from "@apilens/core";
+import { objectLiteralKeys, resolveEndpointExpression, resolveUrlQueryKeys } from "./endpoint.js";
 
 /**
  * - body:      (a sub-part of) the response body, located at `path`
@@ -24,6 +30,9 @@ export interface Endpoint {
 
 export interface ApiCallTarget {
   endpoint: Endpoint;
+  request: RequestShape;
+  /** The API client function a `wrapper` call goes through. */
+  wrapper: FunctionLike | null;
   resolution: ApiCallResolution;
   resultKind: ValueKind;
   resultPath: string[];
@@ -51,6 +60,8 @@ interface WrapperInfo {
 }
 
 const AXIOS_METHODS = new Set(["get", "post", "put", "delete", "patch"]);
+const AXIOS_BODY_METHODS = new Set(["post", "put", "patch"]);
+const UNKNOWN_REQUEST: RequestShape = { queryKeys: null, bodyKeys: null };
 const ELEMENT_CALLBACK_METHODS = new Set([
   "map", "forEach", "filter", "find", "findLast", "some", "every", "flatMap",
 ]);
@@ -417,6 +428,8 @@ export class DataFlowAnalyzer {
     if (mapped) {
       return {
         endpoint: { pattern: normalizePath(mapped.path), method: mapped.method },
+        request: UNKNOWN_REQUEST,
+        wrapper: null,
         resolution: "config",
         resultKind: "body",
         resultPath: [],
@@ -431,6 +444,8 @@ export class DataFlowAnalyzer {
             pattern: args[0] ? resolveEndpointExpression(args[0]) : null,
             method: callee.getName().toUpperCase() as HttpMethod,
           },
+          request: axiosRequest(callee.getName(), args),
+          wrapper: null,
           resolution: "direct",
           resultKind: "envelope",
           resultPath: [],
@@ -445,6 +460,8 @@ export class DataFlowAnalyzer {
           pattern: args[0] ? resolveEndpointExpression(args[0]) : null,
           method: fetchMethod(args[1]),
         },
+        request: fetchRequest(args),
+        wrapper: null,
         resolution: "direct",
         resultKind: "fetchResponse",
         resultPath: [],
@@ -457,6 +474,8 @@ export class DataFlowAnalyzer {
     if (wrapper) {
       return {
         endpoint: wrapper.endpointFor(call),
+        request: UNKNOWN_REQUEST,
+        wrapper: fn,
         resolution: "wrapper",
         resultKind: wrapper.resultKind,
         resultPath: wrapper.resultPath,
@@ -557,6 +576,42 @@ function isAxiosInstance(expr: Node): boolean {
   if (!Node.isVariableDeclaration(decl)) return false;
   const init = decl.getInitializer();
   return Node.isCallExpression(init) && init.getExpression().getText() === "axios.create";
+}
+
+/** axios.get(url, config) / axios.post(url, body, config): query keys from the URL and `config.params`. */
+function axiosRequest(method: string, args: Node[]): RequestShape {
+  const hasBody = AXIOS_BODY_METHODS.has(method);
+  const config = args[hasBody ? 2 : 1];
+  const urlKeys = args[0] ? resolveUrlQueryKeys(args[0]) : [];
+  let paramKeys: string[] | null = [];
+  if (config) {
+    if (!Node.isObjectLiteralExpression(config)) {
+      paramKeys = null;
+    } else {
+      const params = config.getProperty("params");
+      paramKeys = params === undefined ? [] : Node.isPropertyAssignment(params) ? objectLiteralKeys(params.getInitializer()) : null;
+    }
+  }
+  const body = args[1];
+  return {
+    queryKeys: urlKeys === null || paramKeys === null ? null : [...urlKeys, ...paramKeys],
+    bodyKeys: !hasBody ? [] : body === undefined ? [] : objectLiteralKeys(body),
+  };
+}
+
+/** fetch(url, { body: JSON.stringify({...}) }) */
+function fetchRequest(args: Node[]): RequestShape {
+  const queryKeys = args[0] ? resolveUrlQueryKeys(args[0]) : [];
+  const options = args[1];
+  if (!options) return { queryKeys, bodyKeys: [] };
+  if (!Node.isObjectLiteralExpression(options)) return { queryKeys, bodyKeys: null };
+  const body = options.getProperty("body");
+  if (body === undefined) return { queryKeys, bodyKeys: [] };
+  const init = Node.isPropertyAssignment(body) ? body.getInitializer() : undefined;
+  if (Node.isCallExpression(init) && init.getExpression().getText() === "JSON.stringify") {
+    return { queryKeys, bodyKeys: objectLiteralKeys(init.getArguments()[0]) };
+  }
+  return { queryKeys, bodyKeys: null };
 }
 
 function fetchMethod(options: Node | undefined): HttpMethod {

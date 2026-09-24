@@ -58,17 +58,24 @@ packages/
 │       ├── ir/            IR 타입 (Frontend + Backend manifest)
 │       ├── index-store/   SQLite schema + repository
 │       ├── extractor/     LanguageExtractor 인터페이스, SubprocessExtractor
+│       ├── analysis/      Phase 3: 연결(link), contract check, impact 질의, graph
+│       ├── report/        graph renderer (Mermaid, 인터랙티브 HTML)
+│       ├── config.ts      apilens.config.json (apiClientMap, linking)
+│       ├── path.ts        path 정규화 (frontend/backend 공용)
 │       └── ai/            AiProvider 인터페이스 (구현은 Phase 6)
 ├── extractor-typescript/  Phase 1: ts-morph 기반 Frontend 분석
 │   └── src/
 │       ├── analyzer.ts    데이터 흐름 추적 (symbol 기반)
 │       ├── extractor.ts   Manifest 생성
-│       ├── endpoint.ts    URL 표현식 → path pattern 정규화
-│       └── config.ts      apilens.config.json
+│       └── endpoint.ts    URL 표현식 → path pattern, query/body key 추출
 ├── extractor-java/        Phase 2: Spring backend 분석
 │   ├── jvm/               JavaParser 기반 extractor (Gradle → apilens-java-extractor.jar)
 │   └── src/               JavaExtractor (JAR를 subprocess로 실행)
 └── cli/                   apilens 바이너리
+    └── src/
+        ├── workspace.ts   ApiLensWorkspace — CLI/MCP가 공유하는 라이브러리 진입점
+        ├── program.ts     커맨드 정의
+        └── format.ts      텍스트 출력
 ```
 
 `packages/extractor-java/`는 두 부분으로 되어 있다: `jvm/`(Gradle, JavaParser → fat JAR)과 이를 실행하는
@@ -80,16 +87,18 @@ Frontend (Phase 1 구현):
 
 | 타입 | 주요 필드 |
 |---|---|
-| `FileInfo` | path, imports, exports |
+| `FileInfo` | path, imports(**resolvedFile**: tsconfig paths까지 해석된 프로젝트 파일), exports |
 | `FunctionInfo` | id, name, params, returnType, calls, containingComponent |
-| `ApiCallInfo` | endpointPattern, method, calleeExpression, **resolution**, callerFunctionId, location, arguments, returnVarType, code |
+| `ApiCallInfo` | endpointPattern, method, calleeExpression, **resolution**, **wrapperFunctionId**, callerFunctionId, location, arguments, **request**(queryKeys, bodyKeys), returnVarType, code |
 | `PropertyAccessInfo` | apiCallId, object, **path (response body 기준)**, **flow**, location, containingFunctionId, containingComponent, code |
 
 - `resolution`: `direct`(axios/fetch 직접 호출) · `wrapper`(API 호출 결과를 반환하는 함수 호출, 예: `getUser(id)`) · `config`(apiClientMap)
+- `wrapperFunctionId`: wrapper 호출이 거치는 API client 함수. graph에서 `API → getUser → UserPage` 사슬과 "이 파일의 client 함수를 누가 쓰나"에 사용.
+- `request`: 정적으로 알 수 있는 query key(URL의 `?a=`, axios `params`)와 body key(object literal). 알 수 없으면 `null` — 추측하지 않는다.
 - `path`: **응답 body 기준 경로**. `res.data.user.name`(axios)이나 `(await res.json()).user.name`(fetch) 모두 `["user","name"]`로 저장된다. 배열 원소는 `"[]"`. 따라서 Phase 5에서 DTO 필드와 바로 비교할 수 있다.
 - `flow`: `direct`(응답 body임이 증명됨) · `derived`(추적 불가한 함수를 거침, 예: `transform(user).name`) → Phase 5에서 DEFINITE/POSSIBLE 판정의 근거가 된다.
 
-Backend (타입만 정의, Phase 2에서 채움): `EndpointInfo`, `DtoInfo`, `DtoFieldInfo`, `ParamInfo`, `DtoRef`.
+Backend: `EndpointInfo`, `DtoInfo`, `DtoFieldInfo`, `EnumInfo`, `ParamInfo`, 재귀 `TypeRef`(scalar/dto/enum/array/map/typeParameter/unknown).
 
 ## 4. TypeScript AST 분석 방법 (구현됨)
 
@@ -158,31 +167,36 @@ nested type / wildcard import / static import 규칙으로 프로젝트 타입�
 - Enum 값(`@JsonProperty` 반영), Spring Data `Page<T>`/`Slice<T>`는 실제 JSON 모양(`content`, `totalElements`...)의 DTO로 모델링.
 - 알려진 한계: 전역 Jackson 설정(`spring.jackson.property-naming-strategy`), `@JsonUnwrapped`, `@JsonValue` enum(warning), Kotlin 소스.
 
-## 6. API ↔ TypeScript 연결 방법 (Phase 3)
+## 6. API ↔ TypeScript 연결 방법 (Phase 3, 구현됨)
 
-- Backend path도 Frontend와 같은 `normalizePath`로 정규화(`{id}`, `:id` → `{param}`)한 뒤 `METHOD + pattern`으로 정확 매칭.
-- Frontend에 `baseURL`/prefix(`/api`)가 붙는 경우를 위해 config에 prefix 설정을 둔다.
-- 정확 매칭 실패 시 segment 유사도 후보는 리포트에만 표시하고 자동 연결하지 않는다.
+`core/src/analysis/link.ts` — `EndpointLinker`
+
+- 양쪽 path를 같은 `normalizePath`로 정규화(`{id}`, `{id:\\d+}`, `:id`, 템플릿 변수 → `{param}`)하고 segment 단위로 비교.
+- backend `{param}`은 frontend의 어떤 segment(`/users/42` 포함)와도 맞는다. frontend 동적 segment vs backend literal은 약한 일치로, `/users/${x}`는 `/users/search`보다 `/users/{id}`를 우선한다.
+- 결과: `matched` · `method-mismatch`(path는 있으나 method가 다름, 가능한 method 목록 제공) · `not-found`(유사 endpoint 제안) · `unresolved`(URL을 정적으로 알 수 없음).
+- `linking.frontendBasePath`(axios baseURL 등) / `linking.backendBasePath`(context-path) 설정으로 prefix 차이를 맞춘다.
+- 링크는 저장하지 않고 조회 시 `ProjectModel`이 계산한다. frontend/backend 어느 쪽만 다시 추출해도 즉시 반영된다.
 
 ## 7. Index schema (SQLite)
 
-`node:sqlite`(Node 22.13+ 내장)를 사용해 native 모듈 빌드 없이 CI에서 동작한다.
+`node:sqlite`(Node 22.13+ 내장)를 사용해 native 모듈 빌드 없이 CI에서 동작한다. index는 extractor manifest의
+**캐시**다. 각 row는 IR 객체 JSON 전체 + 조회용 컬럼만 가진다(외래키 없음, schema version이 다르면 재생성).
 
 ```sql
-index_meta(key, value)                         -- schemaVersion, language, rootDir, generatedAt
-files(id, path, imports_json, exports_json)
-functions(id, name, file_id, params_json, return_type, calls_json, line, column, component)
-api_calls(id, endpoint_pattern, method, callee_expression, resolution, caller_function_id,
-          file_id, line, column, arguments_json, return_var_type, code)
-property_accesses(id, api_call_id, object, path_json, flow, file_id, line, column,
-                  containing_function_id, containing_component, code)
-
-INDEX api_calls(endpoint_pattern, method)       -- 변경된 endpoint → 호출부
-INDEX property_accesses(api_call_id)            -- 호출부 → 필드 접근
+index_meta(key, value)   -- schemaVersion, language, rootDir, generatedAt, config, backend.*
+files(id, file, json)
+functions(id, file, name, json)
+api_calls(id, file, method, endpoint_pattern, json)
+property_accesses(id, file, api_call_id, json)
+endpoints(id, file, method, path, json)
+dtos(id, file, name, json)
+enums(id, file, name, json)
 ```
 
-조회 경로: `changed endpoint → api_calls → property_accesses → file:line + code`.
-ID는 위치 기반(`call:<file>:<line>:<col>`)이라 같은 코드는 재인덱싱해도 같은 ID를 갖는다.
+**Incremental 갱신**: `writeManifest`는 전체를 지우고 다시 쓰지 않는다. row JSON을 비교해 바뀐 row만
+upsert/delete하고, 영향받은 **파일 목록**을 돌려준다. ID는 위치 기반(`call:<file>:<line>:<col>`)이라 바뀌지 않은
+코드는 같은 row로 유지된다. 분석 자체는 cross-file 흐름(wrapper, JSX props) 때문에 프로젝트 전체를 대상으로 하되,
+`TypeScriptProject.refresh(files)`로 바뀐 파일만 다시 읽는다(MCP 같은 상주 프로세스에서 AST 재사용).
 
 ## 8. API change detection (Phase 4)
 
@@ -228,27 +242,65 @@ interface AiProvider {
 - DEFINITE finding은 AI가 뒤집을 수 없다. AI는 POSSIBLE/LIKELY 해석과 설명 생성에만 쓴다.
 - Provider(Anthropic, OpenAI, Local LLM)는 이 인터페이스만 구현한다.
 
-## 11. Frontend 변경 검사 · 영향 범위 탐색 (Phase 3 확장)
+## 11. Frontend 변경 검사 · 영향 범위 탐색 (Phase 3, 구현됨)
 
-Backend 변경뿐 아니라 **Frontend 변경**도 같은 index로 검사한다.
+**Contract check** (`core/src/analysis/contract.ts`, `apilens check`)
 
-- **Incremental index**: 변경된 TS 파일만 다시 분석해 해당 파일의 `api_calls`/`property_accesses`를 교체한다.
-  wrapper 함수가 있는 파일이 바뀌면 그 wrapper를 호출하는 파일도 재분석 대상에 넣는다(import 관계 사용).
-- **Contract check**: 변경된 TS 파일이 호출하는 API 목록을 index에서 찾고, 실제 `BackendManifest`와 비교한다.
-  - endpoint 없음 (method/path 불일치)
-  - response에 없는 필드 접근 (`user.nmae`, 삭제된 필드)
-  - 필수 path/query 파라미터 누락, request body 필드 불일치
-- **Impact explorer** (실제 변경 없이 "이걸 고치면 어디까지 영향이 가나"):
-  - `apilens impact --api "GET /users/{id}"` → 호출하는 함수 · 컴포넌트 · 파일 · 필드 접근 목록
-  - `apilens impact --file src/pages/User.tsx` → 이 파일이 의존하는 API 목록, 그 API를 공유하는 다른 파일
-  - `apilens impact --field UserResponse.name` → 해당 필드를 읽는 모든 위치
-  - 출력: 텍스트/JSON(검색·필터용) + 그래프(API → 함수 → 컴포넌트 → 파일). 그래프는 인터랙티브 HTML과 Mermaid로 export.
+frontend의 API 사용을 실제 backend 계약과 대조한다. 범위를 파일로 제한하면 해당 파일의 호출 + 해당 파일이 읽는
+응답(다른 파일에서 호출해 props로 넘어온 것 포함)을 검사하고, 호출이 그 파일에 있으면 다른 파일의 필드 읽기까지 검사한다.
+
+| code | severity | 의미 |
+|---|---|---|
+| `ENDPOINT_NOT_FOUND` | error | backend에 해당 endpoint 없음 (유사 endpoint 제안) |
+| `METHOD_MISMATCH` | error | path는 있지만 그 HTTP method는 없음 |
+| `FIELD_NOT_FOUND` | error (derived면 warning) | 응답 타입에 없는 필드 읽기, 오타면 `Did you mean` |
+| `NOT_AN_ARRAY` / `NOT_AN_OBJECT` | error | 객체를 배열처럼, enum/scalar를 객체처럼 사용 |
+| `NO_RESPONSE_BODY` | error | body가 없는 endpoint의 응답을 읽음 |
+| `UNKNOWN_BODY_FIELD` / `MISSING_BODY_FIELD` | warning | request DTO에 없는 key / 필수(non-null) 필드 누락 |
+| `UNKNOWN_QUERY_PARAM` / `MISSING_QUERY_PARAM` | warning | 받지 않는 query param / 필수 param 누락 |
+| `UNRESOLVED_ENDPOINT`, `UNVERIFIABLE_FIELD` | info | 정적으로 확정 불가 (추측하지 않음) |
+
+응답 path 검사는 제네릭을 치환하며(`ApiResponse<Page<User>>`의 `data.content[].name`), 배열 원소(`[]`), map 값,
+문자열/배열의 `length`를 이해한다. 결과: `PASS` / `WARNING` / `FAIL`, `--fail-on`으로 CI exit code 결정.
+
+**Frontend 변경 흐름**
+
+```bash
+apilens index ./frontend --changed-since origin/main --check   # 갱신 → 사용 API 목록 → 계약 검사
+apilens index ./frontend --files src/pages/User.tsx --check
+```
+
+**Impact explorer** (`core/src/analysis/impact.ts`, `apilens impact`) — 실제 변경 없이 영향 범위를 본다.
+
+| 질의 | 결과 |
+|---|---|
+| `--api "GET /users/{id}"` | 호출 위치(client 함수 경유 포함), 읽는 필드별 위치, 파일·컴포넌트 수 |
+| `--file src/api/user.ts` | 이 파일이 쓰는 API, 여기 정의된 client 함수와 그 호출처, import하는 파일(전이), blast radius |
+| `--field UserResponse.name` | 이 필드를 반환하는 모든 endpoint 경로(`[].name`, `content[].name`, `data.name`)와 읽는 위치 |
+| `--search <text>` | API·파일·함수·컴포넌트·DTO·필드 통합 검색 (각각 영향 API/파일 수) |
+| `--summary` | API를 영향 파일 수로 정렬, 파일을 사용 API 수로 정렬, 아무도 안 쓰는 backend endpoint |
+
+**Graph** (`core/src/analysis/graph.ts`, `core/src/report/`)
+
+```text
+endpoint ──calls──▶ api client fn ──calls──▶ caller fn/component ──defined-in──▶ file
+endpoint ──has-field──▶ field ──reads──▶ reading fn/component ──defined-in──▶ file
+```
+
+각 노드에 영향 수(endpoint/field: 하위 파일 수, 함수/파일: 상위 API 수)를 계산한다. 출력:
+- `--format html`: 외부 요청 없는 단일 HTML. 계층 레이아웃, 검색, 종류 필터, 노드 클릭 시 상·하류 추적과 상세 패널, 검색 가능한 목록, 라이트/다크.
+- `--format mermaid`: PR 코멘트·문서용. `--format json`: 다른 도구용.
 
 ## 12. Library / MCP
 
-CLI는 얇은 래퍼이고 분석 기능은 라이브러리 API로 제공한다(`indexFrontend`, `extractBackend`, `checkContract`,
-`findImpact`, ...). 모든 결과는 JSON 직렬화 가능한 객체다. 이를 기반으로 MCP server(tool: `index_frontend`,
-`impact_of_api`, `impact_of_file`, `check_contract` 등)를 제공하거나 기존 MCP 서버에 tool로 이식할 수 있다.
+CLI는 얇은 래퍼이고 기능은 `ApiLensWorkspace`(`packages/cli/src/workspace.ts`)와 `@apilens/core`의 순수 함수로
+제공된다. 모든 결과는 JSON 직렬화 가능한 객체이고 CLI는 `--format json`으로 그대로 출력한다.
+
+- **TypeScript MCP (fastmcp 등)**: `ApiLensWorkspace`를 import해 tool로 등록. workspace가 `TypeScriptProject`를
+  메모리에 유지하므로 `indexFrontend(dir, { files })`는 바뀐 파일만 다시 읽는다.
+- **Python FastMCP**: `apilens ... --format json`을 subprocess로 호출하는 얇은 Python 래퍼.
+- tool 후보: `index_frontend`, `extract_backend`, `check_contract`, `impact_of_api`, `impact_of_file`,
+  `impact_of_field`, `search`, `impact_summary`, `render_graph`(mermaid).
 
 ## 13. CI/CD (Phase 7)
 

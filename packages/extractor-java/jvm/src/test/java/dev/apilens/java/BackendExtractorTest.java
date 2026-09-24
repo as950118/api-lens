@@ -96,9 +96,9 @@ class BackendExtractorTest {
         }
 
         @Test
-        void expandsModelAttributeObjectsAndIgnoresFrameworkParameters() {
+        void expandsModelAttributeObjectsAndPageable() {
             assertEquals(
-                    List.of("keyword", "minAge", "status"),
+                    List.of("keyword", "minAge", "status", "page", "size", "sort"),
                     endpoint("GET /users/search").requestParams().stream().map(ParamInfo::name).toList());
         }
 

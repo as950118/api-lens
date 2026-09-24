@@ -22,22 +22,21 @@ npm run test:jvm    # Java extractor 단위 테스트
 
 ## 사용법
 
-### Frontend 인덱싱
+모든 명령은 같은 index DB(`-i, --index`, 기본 `.apilens/index.db`)를 공유한다.
+
+### 1. Frontend 인덱싱
 
 ```bash
 node packages/cli/dist/bin.js index ./frontend
-# 옵션
-#   -c, --config <path>    apilens.config.json (기본: <frontendDir>/apilens.config.json)
-#   -o, --out <path>       index DB 경로 (기본: .apilens/index.db)
-#   -m, --manifest <path>  추출 결과를 JSON으로도 저장
 ```
 
 ```text
 ApiLens index written to /path/.apilens/index.db
-  Files:              8
-  Functions:          16
-  API calls:          10 (10 with resolved endpoint)
-  Property accesses:  9
+  Files:              9
+  Functions:          22
+  API calls:          15 (15 with resolved endpoint)
+  Property accesses:  16
+  Updated files:      9
 ```
 
 인식하는 패턴 예:
@@ -54,37 +53,71 @@ return <h1>{user.name}</h1>                // → name
 <UserCard user={user} />                   // 자식 컴포넌트까지 추적
 users.map((u) => u.name)                   // → [].name
 transform(user).name                       // → name (derived: 확실하지 않음)
+axios.get("/users", { params: { page } })  // query key: page
 ```
 
-### Backend API 추출 (Spring Boot)
+### 2. Backend API 추출 (Spring Boot)
 
 ```bash
-node packages/cli/dist/bin.js extract-backend ./backend --out .apilens/backend.json
+node packages/cli/dist/bin.js extract-backend ./backend      # -o backend.json 으로 JSON도 저장
 ```
 
-```text
-ApiLens backend manifest written to /path/.apilens/backend.json
-  Endpoints:  10
-  DTOs:       9
-  Enums:      1
-  Warnings:   0
-```
-
-Endpoint(method, path, handler, path/query/header 파라미터, request body, response 타입)와 응답 DTO의 JSON 필드
+Endpoint(method, path, handler, path/query/header 파라미터, request body, response 타입)와 DTO의 JSON 필드
 (상속, record, getter, `@JsonProperty`, `@JsonIgnore`, `@JsonNaming`, nullable, enum, `Page<T>`)를 추출한다.
 backend를 빌드하지 않고 소스만 읽는다.
 
-### apilens.config.json
+### 3. Contract check — frontend가 실제 API와 맞는가
 
-Endpoint를 자동으로 추론할 수 없는 API client(예: 제네릭 `request({ method, url })` 헬퍼)는 명시적으로 매핑한다.
+```bash
+node packages/cli/dist/bin.js check                                   # 전체
+node packages/cli/dist/bin.js index ./frontend --changed-since origin/main --check   # 바뀐 TS 파일만: 갱신 → API 목록 → 검사
+```
+
+```text
+ApiLens contract check: FAIL  (scope: 1 file)
+
+APIs checked (1):
+  ✗ GET /products/{id}  1 call site, 1 field read  1 issue
+
+Issues: 1 error, 0 warnings, 0 info
+
+  ERROR   src/pages/Product.tsx:5:10  FIELD_NOT_FOUND
+          ProductResponse has no field `cost` (reading `cost` from GET /products/{id})
+          product.cost
+```
+
+없는 endpoint, method 불일치, 없는 필드(오타 제안), 배열/객체 혼동, body 없는 응답 읽기, request body/query key 불일치를
+검사한다. `--format json`, `--fail-on error|warning|never`(기본 error → exit 1).
+
+### 4. Impact — 바꾸면 어디까지 영향이 가나 (실제 변경 없이)
+
+```bash
+apilens impact --api "GET /users/{id}"        # 호출 위치, 읽는 필드, 파일·컴포넌트
+apilens impact --file src/api/user.ts         # 이 파일의 API, client 함수 호출처, import하는 파일, blast radius
+apilens impact --field UserResponse.name      # 이 필드를 반환하는 모든 endpoint와 읽는 위치
+apilens impact --search profile               # 통합 검색
+apilens impact --summary                      # API/파일을 영향도 순으로, 안 쓰이는 endpoint
+apilens graph -o .apilens/graph.html          # 전체 인터랙티브 그래프
+apilens impact --file src/api/user.ts -f html -o impact.html   # 특정 질의의 그래프
+apilens impact --api "GET /users/{id}" -f mermaid              # PR 코멘트용 Mermaid
+```
+
+HTML 그래프는 API → 응답 필드 → 함수/컴포넌트 → 파일의 계층 그래프다. 노드를 클릭하면 연결된 전체를 추적하고,
+검색과 종류 필터, 검색 가능한 목록을 제공한다. 외부 리소스 없이 단일 파일로 동작한다.
+
+### apilens.config.json
 
 ```json
 {
   "apiClientMap": {
     "productApi.getProduct": { "method": "GET", "path": "/products/{id}" }
-  }
+  },
+  "linking": { "frontendBasePath": "/api", "backendBasePath": "" }
 }
 ```
+
+- `apiClientMap`: endpoint를 자동 추론할 수 없는 API client(예: 제네릭 `request({ method, url })` 헬퍼)의 명시적 매핑.
+- `linking`: frontend HTTP client의 baseURL, backend context-path 등 prefix 차이.
 
 ## 로드맵
 
@@ -92,8 +125,7 @@ Endpoint를 자동으로 추론할 수 없는 API client(예: 제네릭 `request
 |---|---|---|
 | 1 | TypeScript AST 분석 + Index | ✅ |
 | 2 | Java Spring API 분석 (JavaParser) | ✅ |
-| 3 | Backend API ↔ Frontend 호출 연결, Frontend 변경 시 contract check, incremental index | |
-| 3+ | 영향 범위 탐색 (API/파일/필드 → 영향 목록, 그래프) | |
+| 3 | Backend API ↔ Frontend 호출 연결, contract check, incremental index, 영향 범위 탐색·그래프 | ✅ |
 | 4 | API 변경 감지 | |
 | 5 | Static impact analysis | |
 | 6 | AI verification | |

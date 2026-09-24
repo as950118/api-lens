@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   Node,
   Project,
@@ -10,15 +10,15 @@ import {
   type PropertyAccessExpression,
   type SourceFile,
 } from "ts-morph";
-import type {
-  ApiCallInfo,
-  FileInfo,
-  FrontendManifest,
-  LanguageExtractor,
-  PropertyAccessInfo,
-  SourceLocation,
+import {
+  loadConfig,
+  type ApilensConfig,
+  type FileInfo,
+  type FrontendManifest,
+  type LanguageExtractor,
+  type PropertyAccessInfo,
+  type SourceLocation,
 } from "@apilens/core";
-import { loadConfig, type ApilensConfig } from "./config.js";
 import {
   DataFlowAnalyzer,
   isFunctionLike,
@@ -46,8 +46,47 @@ export function extractTypeScriptManifest(
   rootDir: string,
   config: ApilensConfig = {},
 ): FrontendManifest {
-  const root = resolve(rootDir);
-  const files = loadSourceFiles(root);
+  return TypeScriptProject.load(rootDir, config).extract();
+}
+
+/**
+ * A loaded frontend project. Long-lived callers (e.g. an MCP server) keep one
+ * instance and call `refresh()` with changed files instead of reloading, so
+ * unchanged files keep their parsed ASTs.
+ */
+export class TypeScriptProject {
+  private constructor(
+    readonly root: string,
+    private readonly project: Project,
+    private readonly config: ApilensConfig,
+  ) {}
+
+  static load(rootDir: string, config: ApilensConfig = {}): TypeScriptProject {
+    const root = resolve(rootDir);
+    return new TypeScriptProject(root, loadProject(root), config);
+  }
+
+  /** Re-reads files from disk, picking up edits, new files and deletions. Paths may be relative to the root. */
+  refresh(paths: string[]): void {
+    for (const path of paths) {
+      const absolute = isAbsolute(path) ? path : join(this.root, path);
+      const existing = this.project.getSourceFile(absolute);
+      if (!existsSync(absolute)) {
+        if (existing) this.project.removeSourceFile(existing);
+      } else if (existing) {
+        existing.refreshFromFileSystemSync();
+      } else if (isSourcePath(absolute)) {
+        this.project.addSourceFileAtPath(absolute);
+      }
+    }
+  }
+
+  extract(): FrontendManifest {
+    return extractFrom(this.root, sourceFiles(this.project), this.config);
+  }
+}
+
+function extractFrom(root: string, files: SourceFile[], config: ApilensConfig): FrontendManifest {
   const rel = (sf: SourceFile): string => relative(root, sf.getFilePath()).split(sep).join("/");
 
   const locationOf = (node: Node): SourceLocation => ({
@@ -99,7 +138,7 @@ export function extractTypeScriptManifest(
   };
 
   for (const file of files) {
-    manifest.files.push(fileInfo(file, rel(file), locationOf));
+    manifest.files.push(fileInfo(file, rel, locationOf));
 
     const callsByFunction = new Map<string, Set<string>>();
     file.forEachDescendant((node) => {
@@ -118,10 +157,12 @@ export function extractTypeScriptManifest(
             method: target.endpoint.method,
             calleeExpression: truncate(node.getExpression().getText()),
             resolution: target.resolution,
+            wrapperFunctionId: target.wrapper ? idOf("fn", target.wrapper) : null,
             callerFunctionId: functionIdOf(node),
             file: rel(file),
             location: locationOf(node),
             arguments: node.getArguments().map((a) => truncate(a.getText())),
+            request: target.request,
             returnVarType: boundVariableType(node),
             code: truncate(node.getText()),
           });
@@ -175,22 +216,27 @@ export function extractTypeScriptManifest(
   return manifest;
 }
 
-function loadSourceFiles(root: string): SourceFile[] {
+function loadProject(root: string): Project {
   const tsConfigFilePath = join(root, "tsconfig.json");
-  const project = existsSync(tsConfigFilePath)
-    ? new Project({ tsConfigFilePath })
-    : new Project({
-        compilerOptions: {
-          allowJs: true,
-          jsx: ts.JsxEmit.ReactJSX,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          module: ts.ModuleKind.ESNext,
-          target: ts.ScriptTarget.ES2022,
-        },
-      });
-  if (!existsSync(tsConfigFilePath)) {
-    project.addSourceFilesAtPaths([`${root}/**/*.{ts,tsx}`, `!${root}/**/node_modules/**`]);
-  }
+  if (existsSync(tsConfigFilePath)) return new Project({ tsConfigFilePath });
+  const project = new Project({
+    compilerOptions: {
+      allowJs: true,
+      jsx: ts.JsxEmit.ReactJSX,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  });
+  project.addSourceFilesAtPaths([`${root}/**/*.{ts,tsx}`, `!${root}/**/node_modules/**`]);
+  return project;
+}
+
+function isSourcePath(path: string): boolean {
+  return /\.tsx?$/.test(path) && !path.endsWith(".d.ts") && !path.includes(`${sep}node_modules${sep}`);
+}
+
+function sourceFiles(project: Project): SourceFile[] {
   return project
     .getSourceFiles()
     .filter((sf) => !sf.isDeclarationFile() && !sf.getFilePath().includes("/node_modules/"));
@@ -198,20 +244,27 @@ function loadSourceFiles(root: string): SourceFile[] {
 
 function fileInfo(
   file: SourceFile,
-  path: string,
+  rel: (sf: SourceFile) => string,
   locationOf: (node: Node) => SourceLocation,
 ): FileInfo {
   return {
-    path,
-    imports: file.getImportDeclarations().map((decl) => ({
+    path: rel(file),
+    imports: file.getImportDeclarations().map((decl) => {
+      const target = decl.getModuleSpecifierSourceFile();
+      return {
       source: decl.getModuleSpecifierValue(),
+      resolvedFile:
+        target && !target.isDeclarationFile() && !target.getFilePath().includes("/node_modules/")
+          ? rel(target)
+          : null,
       specifiers: [
         ...(decl.getDefaultImport() ? [decl.getDefaultImport()!.getText()] : []),
         ...(decl.getNamespaceImport() ? [`* as ${decl.getNamespaceImport()!.getText()}`] : []),
         ...decl.getNamedImports().map((n) => n.getName()),
       ],
       location: locationOf(decl),
-    })),
+      };
+    }),
     exports: file.getExportSymbols().map((s) => s.getName()),
   };
 }
@@ -241,8 +294,11 @@ function functionName(fn: FunctionLike): string {
   let parent: Node | undefined = fn.getParent();
   // const UserCard = memo(() => ...)
   if (Node.isCallExpression(parent)) parent = parent.getParent();
-  if (Node.isVariableDeclaration(parent) || Node.isPropertyAssignment(parent)) {
-    return parent.getName();
+  if (Node.isVariableDeclaration(parent)) return parent.getName();
+  if (Node.isPropertyAssignment(parent)) {
+    // export const userApi = { getUser: () => ... }  ->  "userApi.getUser"
+    const owner = parent.getParent().getParent();
+    return Node.isVariableDeclaration(owner) ? `${owner.getName()}.${parent.getName()}` : parent.getName();
   }
   return "<anonymous>";
 }

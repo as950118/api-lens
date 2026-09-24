@@ -1,20 +1,5 @@
 import { Node, SyntaxKind } from "ts-morph";
-
-export const PARAM_PLACEHOLDER = "{param}";
-
-/**
- * Normalizes a path so frontend and backend patterns can be compared:
- * "{id}", ":id" and template substitutions all become "{param}", query
- * strings are dropped, and duplicate/trailing slashes are removed.
- */
-export function normalizePath(path: string): string {
-  const withoutQuery = path.split("?")[0];
-  const normalized = withoutQuery
-    .replace(/\{[^}/]*\}/g, PARAM_PLACEHOLDER)
-    .replace(/:[A-Za-z_][A-Za-z0-9_]*/g, PARAM_PLACEHOLDER)
-    .replace(/\/{2,}/g, "/");
-  return normalized.length > 1 ? normalized.replace(/\/$/, "") : normalized;
-}
+import { normalizePath, PARAM_PLACEHOLDER } from "@apilens/core";
 
 /**
  * Statically resolves the URL argument of an API call into a path pattern.
@@ -25,6 +10,34 @@ export function resolveEndpointExpression(expr: Node): string | null {
   const raw = resolveRaw(expr);
   if (raw === null || !raw.includes("/")) return null;
   return normalizePath(stripOrigin(raw));
+}
+
+/** Query parameter names written into the URL itself, e.g. `/users?page=1&size=${n}` -> ["page", "size"]. */
+export function resolveUrlQueryKeys(expr: Node): string[] | null {
+  const raw = resolveRaw(expr);
+  if (raw === null) return null;
+  const query = raw.split("?")[1];
+  if (query === undefined) return [];
+  return query
+    .split("&")
+    .map((pair) => pair.split("=")[0])
+    .filter((key) => key !== "" && key !== PARAM_PLACEHOLDER);
+}
+
+/** Keys of an object literal, or null when they cannot be known statically (spreads, computed keys, non-literals). */
+export function objectLiteralKeys(expr: Node | undefined): string[] | null {
+  if (!expr || !Node.isObjectLiteralExpression(expr)) return null;
+  const keys: string[] = [];
+  for (const prop of expr.getProperties()) {
+    if (Node.isPropertyAssignment(prop) || Node.isShorthandPropertyAssignment(prop) || Node.isMethodDeclaration(prop)) {
+      const name = prop.getNameNode();
+      if (Node.isComputedPropertyName(name)) return null;
+      keys.push(Node.isStringLiteral(name) ? name.getLiteralValue() : name.getText());
+    } else {
+      return null;
+    }
+  }
+  return keys;
 }
 
 function resolveRaw(expr: Node): string | null {

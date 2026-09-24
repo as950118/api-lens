@@ -1,6 +1,7 @@
 import { Project, SyntaxKind } from "ts-morph";
 import { describe, expect, it } from "vitest";
-import { normalizePath, resolveEndpointExpression } from "../src/endpoint.js";
+import { normalizePath } from "@apilens/core";
+import { resolveEndpointExpression, resolveUrlQueryKeys } from "../src/endpoint.js";
 
 function resolveArg(code: string): string | null {
   const sf = new Project({ useInMemoryFileSystem: true }).createSourceFile(
@@ -35,5 +36,24 @@ describe("resolveEndpointExpression", () => {
     [`"not-a-path"`, null],
   ])("%s -> %s", (code, expected) => {
     expect(resolveArg(code)).toBe(expected);
+  });
+});
+
+describe("resolveUrlQueryKeys", () => {
+  function keys(code: string): string[] | null {
+    const sf = new Project({ useInMemoryFileSystem: true }).createSourceFile(
+      "a.ts",
+      `declare const id: number; declare const url: string; f(${code});`,
+    );
+    return resolveUrlQueryKeys(sf.getDescendantsOfKind(SyntaxKind.CallExpression)[0].getArguments()[0]);
+  }
+
+  it.each([
+    [`"/users"`, []],
+    ["`/users?page=${id}&size=10`", ["page", "size"]],
+    [`"/users?active"`, ["active"]],
+    ["url", null],
+  ])("%s -> %j", (code, expected) => {
+    expect(keys(code)).toEqual(expected);
   });
 });

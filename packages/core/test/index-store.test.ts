@@ -1,71 +1,29 @@
 import { mkdtempSync, rmSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { IndexStore } from "../src/index-store/index-store.js";
-import type { FrontendManifest } from "../src/ir/types.js";
+import { access, backend, call, dto, endpoint, fn, frontend, t } from "./builders.js";
 
-function buildManifest(): FrontendManifest {
-  return {
-    language: "typescript",
-    rootDir: "/frontend",
-    generatedAt: new Date().toISOString(),
-    files: [
-      { path: "src/pages/User.tsx", imports: [], exports: ["UserPage"] },
+function sampleFrontend() {
+  return frontend(
+    [
+      call("call:a", "GET", "/users/{param}", { file: "src/pages/User.tsx", callerFunctionId: "fn:page" }),
+      call("call:b", "GET", "/products/{param}", { file: "src/pages/Product.tsx" }),
     ],
-    functions: [
-      {
-        id: "fn:User.tsx:UserPage",
-        name: "UserPage",
-        file: "src/pages/User.tsx",
-        params: [],
-        returnType: "JSX.Element",
-        calls: ["getUser"],
-        location: { file: "src/pages/User.tsx", line: 5, column: 1 },
-        containingComponent: "UserPage",
-      },
-    ],
-    apiCalls: [
-      {
-        id: "call:User.tsx:12",
-        endpointPattern: "/users/{param}",
-        method: "GET",
-        calleeExpression: "userApi.getUser",
-        resolution: "wrapper",
-        callerFunctionId: "fn:User.tsx:UserPage",
-        file: "src/pages/User.tsx",
-        location: { file: "src/pages/User.tsx", line: 12, column: 20 },
-        arguments: ["id"],
-        returnVarType: "UserResponse",
-        code: "userApi.getUser(id)",
-      },
-    ],
-    propertyAccesses: [
-      {
-        id: "prop:User.tsx:42",
-        apiCallId: "call:User.tsx:12",
-        object: "user",
-        path: ["name"],
-        flow: "direct",
-        file: "src/pages/User.tsx",
-        location: { file: "src/pages/User.tsx", line: 42, column: 15 },
-        containingFunctionId: "fn:User.tsx:UserPage",
-        containingComponent: "UserPage",
-        code: "user.name",
-      },
-    ],
-  };
+    [access("prop:a", "call:a", ["name"], { file: "src/pages/User.tsx" })],
+    [fn("fn:page", "src/pages/User.tsx", "fn:page")],
+  );
 }
 
 describe("IndexStore", () => {
   let dir: string;
-  let dbPath: string;
   let store: IndexStore;
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "apilens-index-store-"));
-    dbPath = join(dir, "index.db");
-    store = IndexStore.open(dbPath);
+    store = IndexStore.open(join(dir, "index.db"));
   });
 
   afterEach(() => {
@@ -73,54 +31,79 @@ describe("IndexStore", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("writes a manifest and reports an accurate summary", () => {
-    const summary = store.writeManifest(buildManifest());
-    expect(summary).toEqual({
-      files: 1,
-      functions: 1,
-      apiCalls: 1,
-      resolvedApiCalls: 1,
-      propertyAccesses: 1,
+  it("writes a frontend manifest and reads it back", () => {
+    const manifest = sampleFrontend();
+    const update = store.writeManifest(manifest);
+    expect(update.summary).toEqual({ files: 2, functions: 1, apiCalls: 2, resolvedApiCalls: 2, propertyAccesses: 1 });
+    expect(update.changedFiles).toEqual(["src/pages/Product.tsx", "src/pages/User.tsx"]);
+    const byId = <T extends { id: string }>(xs: T[]) => [...xs].sort((a, b) => a.id.localeCompare(b.id));
+    const read = store.readFrontendManifest()!;
+    expect(byId(read.apiCalls)).toEqual(byId(manifest.apiCalls));
+    expect(read.propertyAccesses).toEqual(manifest.propertyAccesses);
+    expect(read.functions).toEqual(manifest.functions);
+    expect(read.files.map((f) => f.path).sort()).toEqual(manifest.files.map((f) => f.path).sort());
+  });
+
+  it("reports only files whose records changed on re-index", () => {
+    store.writeManifest(sampleFrontend());
+    const changed = sampleFrontend();
+    changed.propertyAccesses[0] = { ...changed.propertyAccesses[0], path: ["username"] };
+    expect(store.writeManifest(changed).changedFiles).toEqual(["src/pages/User.tsx"]);
+    expect(store.writeManifest(changed).changedFiles).toEqual([]);
+  });
+
+  it("drops records of deleted files", () => {
+    store.writeManifest(sampleFrontend());
+    const withoutProduct = sampleFrontend();
+    withoutProduct.apiCalls = withoutProduct.apiCalls.filter((c) => c.file !== "src/pages/Product.tsx");
+    withoutProduct.files = withoutProduct.files.filter((f) => f.path !== "src/pages/Product.tsx");
+    const update = store.writeManifest(withoutProduct);
+    expect(update.changedFiles).toEqual(["src/pages/Product.tsx"]);
+    expect(update.summary.files).toBe(1);
+    expect(store.listApiCalls().map((c) => c.id)).toEqual(["call:a"]);
+  });
+
+  it("finds api calls by endpoint and accesses by call", () => {
+    store.writeManifest(sampleFrontend());
+    expect(store.findApiCallsByEndpoint("GET", "/users/{param}").map((c) => c.id)).toEqual(["call:a"]);
+    expect(store.findPropertyAccessesForApiCall("call:a").map((a) => a.path)).toEqual([["name"]]);
+  });
+
+  it("stores the backend manifest and reports changed endpoints", () => {
+    const manifest = backend(
+      [endpoint("GET", "/users/{id}", t.dto("User")), endpoint("DELETE", "/users/{id}", null)],
+      [dto("User", { name: t.scalar("String") })],
+    );
+    expect(store.writeBackendManifest(manifest).changedEndpoints).toEqual(["DELETE /users/{id}", "GET /users/{id}"]);
+    expect(store.readBackendManifest()).toEqual({
+      ...manifest,
+      endpoints: [...manifest.endpoints].sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method)),
     });
+
+    const changed = backend([endpoint("GET", "/users/{id}", t.dto("User"))], manifest.dtos);
+    expect(store.writeBackendManifest(changed).changedEndpoints).toEqual(["DELETE /users/{id}"]);
   });
 
-  it("finds api calls by normalized endpoint + method", () => {
-    store.writeManifest(buildManifest());
-    const calls = store.findApiCallsByEndpoint("GET", "/users/{param}");
-    expect(calls).toHaveLength(1);
-    expect(calls[0].calleeExpression).toBe("userApi.getUser");
-    expect(calls[0].file).toBe("src/pages/User.tsx");
-    expect(calls[0].location.line).toBe(12);
+  it("returns null manifests for an empty index", () => {
+    expect(store.readFrontendManifest()).toBeNull();
+    expect(store.readBackendManifest()).toBeNull();
   });
 
-  it("finds property accesses linked to an api call", () => {
-    store.writeManifest(buildManifest());
-    const accesses = store.findPropertyAccessesForApiCall("call:User.tsx:12");
-    expect(accesses).toHaveLength(1);
-    expect(accesses[0].object).toBe("user");
-    expect(accesses[0].path).toEqual(["name"]);
+  it("persists the config used at index time", () => {
+    store.writeConfig({ linking: { frontendBasePath: "/api" } });
+    expect(store.readConfig()).toEqual({ linking: { frontendBasePath: "/api" } });
   });
 
-  it("clears previous data on re-index", () => {
-    store.writeManifest(buildManifest());
-    const empty: FrontendManifest = {
-      language: "typescript",
-      rootDir: "/frontend",
-      generatedAt: new Date().toISOString(),
-      files: [],
-      functions: [],
-      apiCalls: [],
-      propertyAccesses: [],
-    };
-    const summary = store.writeManifest(empty);
-    expect(summary.files).toBe(0);
-    expect(store.listFiles()).toHaveLength(0);
-  });
-
-  it("persists meta information about the index", () => {
-    store.writeManifest(buildManifest());
-    expect(store.getMeta("language")).toBe("typescript");
-    expect(store.getMeta("rootDir")).toBe("/frontend");
-    expect(store.getMeta("schemaVersion")).toBe("1");
+  it("rebuilds an index created with an older schema", () => {
+    store.close();
+    const path = join(dir, "old.db");
+    const db = new DatabaseSync(path);
+    db.exec("CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+    db.exec("INSERT INTO index_meta VALUES ('schemaVersion', '1')");
+    db.exec("CREATE TABLE files (id INTEGER PRIMARY KEY, path TEXT)");
+    db.close();
+    store = IndexStore.open(path);
+    expect(store.getMeta("schemaVersion")).toBe("2");
+    expect(store.writeManifest(sampleFrontend()).summary.files).toBe(2);
   });
 });

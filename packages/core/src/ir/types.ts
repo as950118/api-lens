@@ -23,6 +23,8 @@ export interface SourceLocation {
 
 export interface ImportInfo {
   source: string;
+  /** Project file the import resolves to (tsconfig paths applied), or null for packages / unresolved. */
+  resolvedFile: string | null;
   specifiers: string[];
   location: SourceLocation;
 }
@@ -57,6 +59,12 @@ export interface FunctionInfo {
  */
 export type ApiCallResolution = "direct" | "wrapper" | "config";
 
+/** Statically known request keys. `null` means ApiLens could not determine them (e.g. a variable was passed). */
+export interface RequestShape {
+  queryKeys: string[] | null;
+  bodyKeys: string[] | null;
+}
+
 export interface ApiCallInfo {
   id: string;
   /** Normalized path pattern, e.g. "/users/{param}". Null when not statically resolvable. */
@@ -65,10 +73,13 @@ export interface ApiCallInfo {
   /** Raw callee expression, e.g. "axios.get" or "userApi.getUser". Preserved even when endpoint is unresolved. */
   calleeExpression: string;
   resolution: ApiCallResolution;
+  /** For `wrapper` calls: the API client function being called, e.g. the id of `getUser`. */
+  wrapperFunctionId: string | null;
   callerFunctionId: string | null;
   file: string;
   location: SourceLocation;
   arguments: string[];
+  request: RequestShape;
   returnVarType: string | null;
   code: string;
 }

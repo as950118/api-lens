@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FrontendManifest, PropertyAccessInfo } from "@apilens/core";
-import { extractTypeScriptManifest, loadConfig } from "../src/index.js";
+import { loadConfig } from "@apilens/core";
+import { cpSync, readFileSync } from "node:fs";
+import { extractTypeScriptManifest, TypeScriptProject } from "../src/index.js";
 
 const fixtures = fileURLToPath(new URL("../../../test/fixtures/", import.meta.url));
 
@@ -32,8 +34,13 @@ describe("extractTypeScriptManifest (fixture frontend)", () => {
     const page = manifest.files.find((f) => f.path === "src/pages/User.tsx");
     expect(page?.exports).toEqual(expect.arrayContaining(["UserPage", "loadProfile"]));
     expect(page?.imports).toContainEqual(
-      expect.objectContaining({ source: "../api/user", specifiers: ["getUser", "userApi"] }),
+      expect.objectContaining({
+        source: "../api/user",
+        resolvedFile: "src/api/user.ts",
+        specifiers: ["getUser", "userApi"],
+      }),
     );
+    expect(page?.imports).toContainEqual(expect.objectContaining({ source: "react", resolvedFile: null }));
   });
 
   it("collects functions and marks React components", () => {
@@ -106,6 +113,26 @@ describe("extractTypeScriptManifest (fixture frontend)", () => {
       });
     });
 
+    it("records which API client function a wrapper call goes through", () => {
+      const call = callAt(manifest, "src/pages/User.tsx", 27);
+      const wrapper = manifest.functions.find((f) => f.id === call.wrapperFunctionId);
+      expect(wrapper).toMatchObject({ name: "userApi.getUser", file: "src/api/user.ts" });
+      expect(callAt(manifest, "src/api/user.ts", 6).wrapperFunctionId).toBeNull();
+    });
+
+    it("captures statically known query and body keys", () => {
+      expect(callAt(manifest, "src/pages/UserAdmin.tsx", 18).request).toEqual({
+        queryKeys: ["keyword", "size", "limit"],
+        bodyKeys: [],
+      });
+      expect(callAt(manifest, "src/pages/UserAdmin.tsx", 14).request).toEqual({
+        queryKeys: [],
+        bodyKeys: ["name", "age", "nickname"],
+      });
+      expect(callAt(manifest, "src/api/user.ts", 12).request.bodyKeys).toBeNull();
+      expect(callAt(manifest, "src/pages/User.tsx", 26).request).toEqual({ queryKeys: null, bodyKeys: null });
+    });
+
     it("records the calling function", () => {
       const call = callAt(manifest, "src/pages/User.tsx", 26);
       const caller = manifest.functions.find((f) => f.id === call.callerFunctionId);
@@ -169,6 +196,39 @@ describe("extractTypeScriptManifest (fixture frontend)", () => {
       const ids = new Set(manifest.apiCalls.map((c) => c.id));
       expect(manifest.propertyAccesses.every((a) => ids.has(a.apiCallId))).toBe(true);
     });
+  });
+});
+
+describe("TypeScriptProject.refresh", () => {
+  let dir: string;
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "apilens-refresh-"));
+    cpSync(join(fixtures, "frontend"), dir, { recursive: true });
+  });
+
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("picks up edited, added and deleted files without reloading the project", () => {
+    const project = TypeScriptProject.load(dir);
+    const before = project.extract();
+
+    const card = join(dir, "src/components/UserCard.tsx");
+    writeFileSync(card, readFileSync(card, "utf8").replace("user.name.toUpperCase()", "user.username"));
+    writeFileSync(
+      join(dir, "src/pages/New.tsx"),
+      `import axios from "axios";\nexport const load = () => axios.get("/new").then((r) => r.data.value);\n`,
+    );
+    rmSync(join(dir, "src/pages/Product.tsx"));
+    project.refresh(["src/components/UserCard.tsx", "src/pages/New.tsx", "src/pages/Product.tsx"]);
+
+    const after = project.extract();
+    expect(accessesAt(after, "src/components/UserCard.tsx", 4).map((a) => a.path)).toEqual([["username"]]);
+    expect(after.apiCalls.some((c) => c.endpointPattern === "/new")).toBe(true);
+    expect(after.files.some((f) => f.path === "src/pages/Product.tsx")).toBe(false);
+    expect(after.files.length).toBe(before.files.length);
   });
 });
 
