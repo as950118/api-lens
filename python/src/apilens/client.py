@@ -99,6 +99,27 @@ class ApiLens:
             args += ["--head", head]
         return self._report(args, format)
 
+    def verify(
+        self,
+        backend_dir: str | os.PathLike[str] | None = None,
+        *,
+        base: str | None = None,
+        head: str | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None,
+        format: Literal["json", "markdown"] = "json",
+    ) -> Any:
+        """Change analysis plus AI verification of the undecided (LIKELY/POSSIBLE) findings.
+
+        Compares against the stored contract, or between git refs when `base` is given.
+        Needs AI credentials where the CLI runs (e.g. ANTHROPIC_API_KEY)."""
+        args = ["verify", "--backend", self._dir(backend_dir, self.backend_dir, "backend_dir"), "--fail-on", "never"]
+        for flag, value in (("--base", base), ("--head", head), ("--provider", provider), ("--model", model), ("--effort", effort)):
+            if value:
+                args += [flag, value]
+        return self._report(args, format)
+
     def _report(self, args: list[str], format: str) -> Any:
         if format == "markdown":
             return self._run_text([*args, "--format", "markdown"])

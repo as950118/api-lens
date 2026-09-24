@@ -24,6 +24,18 @@ inputs:
     description: "Fail when changed frontend code violates the contract at this level: error | warning | never"
     required: false
     default: error
+  ai-provider:
+    description: "Verify undecided findings with AI (e.g. anthropic). Pass credentials via env, e.g. ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}"
+    required: false
+    default: ""
+  ai-model:
+    description: Model id for AI verification (default is the provider's default)
+    required: false
+    default: ""
+  verify-fail-on:
+    description: "With ai-provider: fail when the verified result is at this level: fail | warning | never"
+    required: false
+    default: fail
   comment:
     description: Post (or update) the report as a pull request comment
     required: false
@@ -66,6 +78,9 @@ runs:
         APILENS_BASE: ${{ inputs.base || format('origin/{0}', github.base_ref) }}
         APILENS_FAIL_ON: ${{ inputs.fail-on }}
         APILENS_CHECK_FAIL_ON: ${{ inputs.check-fail-on }}
+        APILENS_AI_PROVIDER: ${{ inputs.ai-provider }}
+        APILENS_AI_MODEL: ${{ inputs.ai-model }}
+        APILENS_VERIFY_FAIL_ON: ${{ inputs.verify-fail-on }}
         APILENS_OUT: ${{ runner.temp }}/apilens
       run: |
         echo "report=$APILENS_OUT/report.md" >> "$GITHUB_OUTPUT"

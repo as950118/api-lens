@@ -1,6 +1,9 @@
+import { groupErrors } from "@apilens/core";
 import type {
   ApiImpact,
   ChangeReport,
+  VerifiedChangeReport,
+  VerifiedImpactSite,
   ContractReport,
   FieldImpact,
   FileImpact,
@@ -180,24 +183,41 @@ function plural(n: number): string {
   return n === 1 ? "" : "s";
 }
 
-export function formatChangeReport(report: ChangeReport): string {
+export function formatChangeReport(report: ChangeReport | VerifiedChangeReport): string {
   const c = report.counts;
+  const verified = "ai" in report ? report : null;
   const lines = [
-    `ApiLens API change report: ${report.result}`,
+    `ApiLens API change report: ${report.result}${verified ? `  (static analysis: ${verified.staticResult})` : ""}`,
     "",
     `Changed APIs: ${c.changedApis}   Breaking changes: ${c.breakingChanges}   Frontend impact: ${c.DEFINITE} definite, ${c.LIKELY} likely, ${c.POSSIBLE} possible`,
   ];
+  if (verified) {
+    const a = verified.ai;
+    lines.push(
+      `AI verification (${a.provider}, ${a.model}): ${a.verified}/${a.candidates} checked - ` +
+        `${a.counts.FAIL} fail, ${a.counts.WARNING} warning, ${a.counts.PASS} pass, ${a.counts.UNKNOWN} unknown` +
+        (a.discarded ? ` (${a.discarded} discarded for missing evidence)` : ""),
+    );
+    for (const [message, endpoints] of groupErrors(a.errors)) {
+      lines.push(`  error (${endpoints.length} API${plural(endpoints.length)}): ${message}`);
+    }
+  }
   for (const e of report.endpoints) {
-    lines.push("", `${e.endpointId}  [${e.movedTo ? `moved → ${e.movedTo}` : e.status}]  ${e.result}`);
+    const ai = "ai" in e && e.ai?.result ? `  AI: ${e.ai.result}` : "";
+    lines.push("", `${e.endpointId}  [${e.movedTo ? `moved → ${e.movedTo}` : e.status}]  ${e.result}${ai}`);
     for (const ch of e.changes) lines.push(`  ${ch.breaking ? "!" : " "} ${ch.message}`);
-    const sites = e.sites;
     lines.push(
       `  Related files: ${e.relatedFiles.length}   Definite: ${e.counts.DEFINITE}   Likely: ${e.counts.LIKELY}   Possible: ${e.counts.POSSIBLE}`,
     );
-    for (const site of sites) {
+    for (const site of e.sites as VerifiedImpactSite[]) {
       lines.push(`    ${site.confidence.padEnd(8)} ${site.file}:${site.line}  ${who(site.functionName, site.component)}  ${site.code}`);
       lines.push(`             ${site.reason}`);
+      if (site.ai) {
+        lines.push(`             AI ${site.ai.result} (${site.ai.confidence.toFixed(2)}): ${site.ai.reason}`);
+        for (const ev of site.ai.evidence) lines.push(`               evidence ${ev.file}:${ev.line}  ${ev.code}`);
+      }
     }
   }
   return lines.join("\n");
 }
+

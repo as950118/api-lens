@@ -10,6 +10,9 @@
 # Optional: APILENS_CLI (default: this repo's CLI), APILENS_INDEX, APILENS_OUT,
 #           APILENS_FAIL_ON (definite|likely|possible|never, default definite),
 #           APILENS_CHECK_FAIL_ON (error|warning|never, default error)
+#           APILENS_AI_PROVIDER (e.g. anthropic) to add AI verification of undecided findings,
+#           APILENS_AI_MODEL, APILENS_VERIFY_FAIL_ON (fail|warning|never, default fail).
+#           AI verification needs provider credentials (e.g. ANTHROPIC_API_KEY).
 set -uo pipefail
 
 : "${APILENS_FRONTEND:?set APILENS_FRONTEND to the frontend directory}"
@@ -26,8 +29,14 @@ apilens() { "${cli[@]}" --index "$index" "$@"; }
 status=0
 apilens index "$APILENS_FRONTEND" > /dev/null || exit 2
 
-apilens diff --base "$APILENS_BASE" --backend "$APILENS_BACKEND" \
-  --format markdown --fail-on "${APILENS_FAIL_ON:-definite}" --out "$out/api-changes.md" > /dev/null
+if [ -n "${APILENS_AI_PROVIDER:-}" ] && [ "${APILENS_AI_PROVIDER}" != "none" ]; then
+  apilens verify --base "$APILENS_BASE" --backend "$APILENS_BACKEND" \
+    --provider "$APILENS_AI_PROVIDER" ${APILENS_AI_MODEL:+--model "$APILENS_AI_MODEL"} \
+    --format markdown --fail-on "${APILENS_VERIFY_FAIL_ON:-fail}" --out "$out/api-changes.md" > /dev/null
+else
+  apilens diff --base "$APILENS_BASE" --backend "$APILENS_BACKEND" \
+    --format markdown --fail-on "${APILENS_FAIL_ON:-definite}" --out "$out/api-changes.md" > /dev/null
+fi
 code=$?
 if [ "$code" -gt 1 ]; then exit "$code"; fi
 status=$((status | code))

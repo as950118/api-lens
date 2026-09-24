@@ -10,6 +10,7 @@ export default defineConfig({
       "@apilens/extractor-typescript": src("extractor-typescript"),
       "@apilens/extractor-java": src("extractor-java"),
       "@apilens/cli": src("cli"),
+      "@apilens/ai-anthropic": src("ai-anthropic"),
     },
   },
   test: {

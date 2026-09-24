@@ -30,6 +30,7 @@ const TOOL_NAMES = [
   "index_frontend",
   "render_graph",
   "search",
+  "verify_api_changes",
 ];
 
 let dir: string;
@@ -49,7 +50,7 @@ describe("createApiLensTools", () => {
     const tools = createApiLensTools();
     expect(tools.map((t) => t.name).sort()).toEqual(TOOL_NAMES);
     const readOnly = tools.filter((t) => t.readOnly).map((t) => t.name).sort();
-    expect(readOnly).toEqual(["check_contract", "diff_api_changes", "impact_of_api", "impact_of_field", "impact_of_file", "impact_summary", "search"]);
+    expect(readOnly).toEqual(["check_contract", "diff_api_changes", "impact_of_api", "impact_of_field", "impact_of_file", "impact_summary", "search", "verify_api_changes"]);
     expect(tools.find((t) => t.name === "impact_of_api")!.parameters.parse({ api: "GET /x" })).toEqual({
       api: "GET /x",
       graph: "none",
@@ -88,6 +89,18 @@ describe("createApiLensTools", () => {
     })) as { result: string; markdown: string };
     expect(changes.result).toBe("FAIL");
     expect(changes.markdown).toContain("moved → `PUT /users/{id}/profile`");
+
+    const verified = (await createApiLensTools({
+      indexPath: join(dir, "tools.db"),
+      backendDir: join(fixtures, "backend-v2"),
+      aiProvider: {
+        name: "fake",
+        model: "fake-model",
+        verify: async (request) => ({ model: "fake-model", verdicts: request.candidates.map((c) => ({ id: c.id, result: "UNKNOWN", confidence: 0, reason: "n/a", evidence: [] })) }),
+      },
+    }).find((t) => t.name === "verify_api_changes")!.run({})) as { ai: { verified: number; counts: { UNKNOWN: number } } };
+    expect(verified.ai.verified).toBe(6);
+    expect(verified.ai.counts.UNKNOWN).toBe(6);
 
     const html = (await tools.render_graph.run({ format: "html", outPath: join(dir, "g.html") })) as { path: string };
     expect(existsSync(html.path)).toBe(true);

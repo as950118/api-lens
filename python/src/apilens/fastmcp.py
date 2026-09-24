@@ -49,6 +49,17 @@ def register_tools(mcp: Any, lens: ApiLens | None = None, *, prefix: str = "", *
         """Compare the backend API at two git refs (head omitted = working tree) and list affected frontend code."""
         return lens.diff(base, head, format=format)
 
+    def verify_api_changes(
+        base: str | None = None,
+        head: str | None = None,
+        model: str | None = None,
+        format: Literal["json", "markdown"] = "json",
+    ) -> Any:
+        """Backend change analysis plus AI review of only the findings static analysis could not decide
+        (LIKELY / POSSIBLE). DEFINITE findings are never overridden; verdicts without evidence from the provided code
+        become UNKNOWN. Compares against the stored contract, or between git refs with `base`/`head`."""
+        return lens.verify(base=base, head=head, model=model, format=format)
+
     def impact_of_api(api: str, graph: GraphMode = "none") -> list[dict[str, Any]]:
         """Everything in the frontend that depends on an API (e.g. "GET /users/{id}"), without changing anything:
         call sites, response fields read and where, files and components."""
@@ -88,6 +99,7 @@ def register_tools(mcp: Any, lens: ApiLens | None = None, *, prefix: str = "", *
         (check_contract, True),
         (analyze_api_changes, False),
         (diff_api_changes, True),
+        (verify_api_changes, True),
         (impact_of_api, True),
         (impact_of_file, True),
         (impact_of_field, True),

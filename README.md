@@ -143,7 +143,24 @@ PUT /users/{id}  [moved → PUT /users/{id}/profile]  FAIL
 enum 값 추가·삭제. 영향은 `DEFINITE`(확실) / `LIKELY`(대부분 깨짐) / `POSSIBLE`(연결은 있으나 증명 불가)로 나뉜다.
 `--fail-on definite|likely|possible|never`(기본 definite), `--format text|json|markdown`.
 
-### 6. CI/CD
+### 6. AI 검증 (선택)
+
+정적 분석이 확정하지 못한 위치(LIKELY / POSSIBLE)만 AI가 다시 본다. DEFINITE는 AI에 보내지 않고 뒤집지도 않는다.
+
+```bash
+export ANTHROPIC_API_KEY=...          # 또는 `ant auth login`
+apilens verify --backend ./backend                          # 저장된 계약 대비
+apilens verify --backend ./backend --base origin/main -f markdown
+# --provider anthropic (기본) --model <id> (기본 claude-opus-5) --effort low|medium|high|xhigh|max
+```
+
+- AI에는 **해당 코드 주변 몇 줄 + 데이터를 가져온 호출부 + 변경 전/후 응답 스키마**만 보낸다. repository 전체는 보내지 않는다.
+- 응답은 구조화된 출력(JSON schema)으로 받으며, 판정마다 file:line과 코드 인용을 요구한다. 보낸 코드에 없는 근거를 대면 그 판정은 `UNKNOWN`으로 강등된다.
+- 최종 결과: DEFINITE가 있으면 FAIL, 그 외에는 AI FAIL → FAIL, 전부 PASS → PASS, 나머지(WARNING/UNKNOWN/검증 실패) → WARNING. 정적 결과(`staticResult`)도 함께 남는다.
+- 자격 증명이 없거나 호출이 실패해도 리포트는 정적 결과로 나오고 오류만 표시된다.
+- Claude Opus 5 요청에는 서버 측 refusal fallback(`fallbacks: "default"`)이 켜져 있다. 거절되면 같은 호출 안에서 fallback 모델로 재시도한다.
+
+### 7. CI/CD
 
 GitHub Actions (이 저장소의 composite action, `examples/github-workflow.yml`):
 
@@ -160,14 +177,16 @@ jobs:
         with: { frontend: frontend, backend: backend }
 ```
 
+AI 검증을 켜려면 `with: { ai-provider: anthropic }`와 `env: { ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} }`를 추가한다.
+
 PR마다 (1) backend API 변경이 영향을 주는 frontend 코드, (2) 변경된 frontend 파일의 계약 위반을 검사해서 job summary와
 PR 코멘트(갱신)로 남기고, 기준 이상이면 job을 실패시킨다. 다른 CI에서는 `scripts/apilens-ci.sh`를 그대로 쓴다
 (`APILENS_FRONTEND`, `APILENS_BACKEND`, `APILENS_BASE`, `APILENS_FAIL_ON`, `APILENS_CHECK_FAIL_ON`).
 
-### 7. MCP / 라이브러리
+### 8. MCP / 라이브러리
 
 같은 기능을 MCP tool로 제공한다. tool: `index_frontend`, `extract_backend`, `check_contract`,
-`analyze_api_changes`, `diff_api_changes`, `impact_of_api`,
+`analyze_api_changes`, `diff_api_changes`, `verify_api_changes`, `impact_of_api`,
 `impact_of_file`, `impact_of_field`, `search`, `impact_summary`, `render_graph`.
 
 **독립 MCP 서버 (stdio)** — Claude Desktop / Claude Code 등에 바로 연결:
@@ -233,11 +252,9 @@ register_tools(mcp, frontend_dir="./frontend", backend_dir="./backend", prefix="
 | 3 | Backend API ↔ Frontend 호출 연결, contract check, incremental index, 영향 범위 탐색·그래프 | ✅ |
 | 4 | API 변경 감지 | ✅ |
 | 5 | Static impact analysis (DEFINITE / LIKELY / POSSIBLE) | ✅ |
-| 6 | AI verification | |
+| 6 | AI verification (provider 추상화, Anthropic 구현, evidence 검증) | ✅ |
 | 7 | Git diff / CI integration (GitHub Action, CI script, Markdown 리포트) | ✅ |
 | - | Library API / MCP (stdio 서버, TS fastmcp, Python FastMCP) | ✅ |
-
-`apilens verify`(AI 검증, Phase 6)는 커맨드만 등록되어 있고 아직 동작하지 않는다.
 
 ## 새 언어 추가
 

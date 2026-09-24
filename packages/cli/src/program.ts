@@ -10,6 +10,7 @@ import {
   renderContractReportMarkdown,
   type ChangeReport,
   type ContractReport,
+  type VerifiedChangeReport,
   type GraphAttachment,
   type ImpactGraph,
 } from "@apilens/core";
@@ -24,6 +25,8 @@ import {
   formatSearch,
   formatSummary,
 } from "./format.js";
+import type { Effort } from "@apilens/ai-anthropic";
+import { AI_PROVIDERS, createAiProvider } from "./ai.js";
 import { ApiLensWorkspace, DEFAULT_INDEX_PATH } from "./workspace.js";
 
 type Format = "text" | "json" | "mermaid" | "html" | "markdown";
@@ -224,17 +227,45 @@ export function buildProgram(): Command {
 
   program
     .command("verify")
-    .description("Run static analysis + AI verification (not implemented yet - Phase 6)")
-    .allowUnknownOption()
-    .action(() => {
-      console.error("apilens verify is not implemented yet (planned for Phase 6).");
-      process.exitCode = 2;
+    .description("Change analysis + AI verification of the findings static analysis could not decide")
+    .requiredOption("--backend <dir>", "backend project root with the changed API")
+    .option("--base <ref>", "compare git refs (like `diff`) instead of the contract stored in the index")
+    .option("--head <ref>", "with --base: git ref with the change (default: the working tree)")
+    .addOption(new Option("--provider <name>", "AI provider").choices([...AI_PROVIDERS]).default(process.env.APILENS_AI_PROVIDER ?? "anthropic"))
+    .option("--model <model>", "model id (default: $APILENS_AI_MODEL or the provider default)")
+    .addOption(new Option("--effort <level>", "reasoning effort").choices(["low", "medium", "high", "xhigh", "max"]))
+    .option("--max-candidates <n>", "at most this many locations per endpoint are sent to the model", (v) => Number.parseInt(v, 10), 25)
+    .option("--jar <path>", "Java extractor JAR (defaults to the bundled one)")
+    .addOption(formatOption(["text", "json", "markdown"], "text"))
+    .addOption(
+      new Option("--fail-on <level>", "exit with code 1 when the verified result is at this level or worse")
+        .choices(["fail", "warning", "never"])
+        .default("fail"),
+    )
+    .option("-o, --out <path>", "write the report to a file")
+    .action(async (opts: {
+      backend: string; base?: string; head?: string; provider: string; model?: string; effort?: Effort;
+      maxCandidates: number; jar?: string; format: Format; failOn: "fail" | "warning" | "never"; out?: string;
+    }) => {
+      const provider = createAiProvider(opts.provider, { model: opts.model, effort: opts.effort });
+      const report = await workspace().verifyChanges(opts.backend, {
+        provider,
+        base: opts.base,
+        head: opts.head,
+        jarPath: opts.jar,
+        maxCandidatesPerEndpoint: opts.maxCandidates,
+      });
+      const title = report.base ? `ApiLens: verified API changes ${report.base}...${report.head}` : "ApiLens: verified API change report";
+      emit(renderChanges(report, opts.format, title), opts.out);
+      if ((opts.failOn === "fail" && report.result === "FAIL") || (opts.failOn === "warning" && report.result !== "PASS")) {
+        process.exitCode = 1;
+      }
     });
 
   return program;
 }
 
-function renderChanges(report: ChangeReport, format: Format, title?: string): string {
+function renderChanges(report: ChangeReport | VerifiedChangeReport, format: Format, title?: string): string {
   if (format === "json") return JSON.stringify(report, null, 2);
   if (format === "markdown") return renderChangeReportMarkdown(report, title);
   return formatChangeReport(report);

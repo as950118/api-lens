@@ -62,7 +62,7 @@ packages/
 │       ├── report/        graph renderer (Mermaid, 인터랙티브 HTML)
 │       ├── config.ts      apilens.config.json (apiClientMap, linking)
 │       ├── path.ts        path 정규화 (frontend/backend 공용)
-│       └── ai/            AiProvider 인터페이스 (구현은 Phase 6)
+│       └── ai/            Phase 6: AiProvider 인터페이스, prompt, 검증 오케스트레이션
 ├── extractor-typescript/  Phase 1: ts-morph 기반 Frontend 분석
 │   └── src/
 │       ├── analyzer.ts    데이터 흐름 추적 (symbol 기반)
@@ -71,6 +71,7 @@ packages/
 ├── extractor-java/        Phase 2: Spring backend 분석
 │   ├── jvm/               JavaParser 기반 extractor (Gradle → apilens-java-extractor.jar)
 │   └── src/               JavaExtractor (JAR를 subprocess로 실행)
+├── ai-anthropic/          Phase 6: Claude provider (@anthropic-ai/sdk)
 ├── mcp/                   MCP: stdio 서버, fastmcp adapter, tool 정의 (python/ 은 Python 바인딩)
 └── cli/                   apilens 바이너리
     └── src/
@@ -239,22 +240,38 @@ path로 매칭해 등급을 매긴다.
 DEFINITE가 있으면 `FAIL`, LIKELY/POSSIBLE만 있으면 `WARNING`, 없으면 `PASS`. Text / JSON / Markdown(PR 코멘트용,
 `core/src/report/markdown.ts`)으로 출력한다.
 
-## 10. AI verification interface (Phase 6)
+## 10. AI verification (Phase 6, 구현됨)
 
-`packages/core/src/ai/types.ts`
+AI는 분석 엔진이 아니라 **검증 레이어**다. 정적 분석이 확정하지 못한 위치만 다시 보고, 근거 없는 판단은 받지 않는다.
 
-```ts
-interface AiProvider {
-  readonly name: string;
-  verify(input: AiVerificationInput): Promise<AiVerificationResult>;
-}
+```text
+ChangeReport ──▶ verifyChangeReport (core, vendor 중립)
+                  ├─ 대상: LIKELY / POSSIBLE site만 (DEFINITE는 전송·변경 안 함), endpoint당 최대 25개
+                  ├─ 입력: 변경 목록 + 변경 전/후 응답 스키마(TS 형태) + 후보 위치 + 코드 snippet
+                  │        (후보 ±6줄, 데이터를 가져온 API 호출 ±3줄, 파일별로 병합) — repository 전체 X
+                  ├─ buildVerificationPrompt → AiProvider.verify → 구조화된 verdicts
+                  └─ 검증: evidence(file, line, code)가 보낸 snippet의 해당 줄(±1)에 실제로 있어야 함
+                           없으면 UNKNOWN으로 강등, 누락된 id도 UNKNOWN
 ```
 
-- 입력: API 변경 요약, 변경 전/후 DTO, 관련 코드 snippet, 정적 분석 finding. **Repository 전체는 보내지 않는다.**
-- 출력: `PASS | WARNING | FAIL | UNKNOWN`, confidence, reason, evidence(file/line/code).
-- evidence가 없거나 입력에 없는 위치를 인용하는 응답은 `UNKNOWN`으로 강등한다.
-- DEFINITE finding은 AI가 뒤집을 수 없다. AI는 POSSIBLE/LIKELY 해석과 설명 생성에만 쓴다.
-- Provider(Anthropic, OpenAI, Local LLM)는 이 인터페이스만 구현한다.
+`core/src/ai/`
+
+| 파일 | 역할 |
+|---|---|
+| `types.ts` | `AiProvider { name, model, verify(request) }`, request/verdict 타입 |
+| `prompt.ts` | 모든 provider가 그대로 보내는 system/user prompt |
+| `schema-render.ts` | DTO를 frontend가 받는 JSON 모양(`{ age: number; profile: {...} \| null }`)으로 렌더링 |
+| `verify.ts` | 후보 선택, snippet 수집, 동시 실행(기본 3), evidence 검증, 결과 병합 |
+
+결과 판정 (endpoint 단위): DEFINITE 존재 → FAIL · AI FAIL → FAIL · 모든 후보 PASS → PASS · 그 외(WARNING, UNKNOWN,
+호출 실패) → WARNING. `staticResult`를 함께 보존하므로 AI가 무엇을 바꿨는지 추적할 수 있다.
+
+**Provider** — `packages/ai-anthropic` (`AnthropicProvider`)
+- 공식 `@anthropic-ai/sdk`의 `client.beta.messages.parse` + `betaZodOutputFormat`(구조화된 출력)로 스키마에 맞는 verdict만 받는다.
+- 기본 모델 `claude-opus-5`(`--model` / `APILENS_AI_MODEL`), adaptive thinking, `--effort` 선택.
+- 서버 측 refusal fallback(`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`) 사용. `refusal` / `max_tokens` stop reason은 오류로 처리.
+- 인증은 SDK 기본 해석 순서(`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ant auth login` profile).
+- 다른 provider(OpenAI, 로컬 LLM)는 `AiProvider`를 구현한 패키지를 추가하고 `createAiProvider`(`packages/cli/src/ai.ts`)에 등록한다. prompt와 검증 로직은 공유된다.
 
 ## 11. Frontend 변경 검사 · 영향 범위 탐색 (Phase 3, 구현됨)
 
@@ -343,4 +360,4 @@ git push / PR → CI
 - `scripts/apilens-ci.sh`: 위 흐름 전체. 환경 변수만으로 설정하므로 어떤 CI에서도 사용 가능.
 - `action.yml`: Node/Java 설정 → ApiLens 빌드 → 스크립트 실행 → PR 코멘트 갱신(`gh pr comment --edit-last --create-if-none`).
 - `--fail-on`: 변경 영향은 `definite|likely|possible|never`, 계약 검사는 `error|warning|never`.
-- AI 검증(Phase 6)은 API key가 있을 때만 켜지는 추가 단계로 붙일 예정이며, 없으면 정적 분석 결과만으로 판정한다.
+- `APILENS_AI_PROVIDER`(action: `ai-provider`)를 주면 `diff` 대신 `verify --base`를 실행한다. 자격 증명이 없거나 실패하면 정적 결과로 판정한다.

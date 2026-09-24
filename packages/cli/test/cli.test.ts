@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_JAR_PATH } from "@apilens/extractor-java";
+import type { AiProvider, AiVerificationRequest } from "@apilens/core";
 import { ApiLensWorkspace } from "../src/workspace.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -89,6 +90,43 @@ describe.skipIf(!hasJar)("with the backend contract", () => {
     const report = ws.check({ files: ["src/pages/User.tsx", "src/components/UserCard.tsx"] });
     expect(report.result).toBe("PASS");
     expect(report.apis.map((a) => a.apiKey)).toEqual(["GET /users/{id}"]);
+  });
+
+  it("verifies undecided findings with an AI provider, using real source snippets", async () => {
+    const requests: AiVerificationRequest[] = [];
+    const provider: AiProvider = {
+      name: "fake",
+      model: "fake-model",
+      async verify(request) {
+        requests.push(request);
+        return {
+          model: "fake-model",
+          verdicts: request.candidates.map((c) => ({
+            id: c.id,
+            result: "PASS" as const,
+            confidence: 0.6,
+            reason: "Rendered as text only.",
+            evidence: [{ file: c.file, line: c.line, code: c.code }],
+          })),
+        };
+      },
+    };
+    const report = await ws.verifyChanges(join(fixtures, "backend-v2"), { provider });
+
+    expect(report.staticResult).toBe("FAIL");
+    expect(report.result).toBe("FAIL"); // DEFINITE findings are never overridden
+    expect(report.ai).toMatchObject({ provider: "fake", verified: 6, candidates: 6, discarded: 0 });
+    const sent = requests.flatMap((r) => r.candidates);
+    expect(sent.every((c) => c.staticConfidence !== ("DEFINITE" as string))).toBe(true);
+
+    const userRequest = requests.find((r) => r.endpointId === "GET /users/{id}")!;
+    const page = userRequest.snippets.find((s) => s.file === "src/pages/User.tsx")!;
+    expect(page.lines[19 - page.startLine]).toContain("<span>{user.age}</span>");
+    expect(userRequest.afterSchema).toContain("age: string | null;");
+    expect(userRequest.beforeSchema).toContain("age: number;");
+
+    const getUsers = report.endpoints.find((e) => e.endpointId === "GET /users")!;
+    expect(getUsers.result).toBe("FAIL");
   });
 
   it("answers impact questions from the index", () => {

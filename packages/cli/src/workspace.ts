@@ -1,19 +1,23 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   analyzeChangeImpact,
   checkContract,
+  verifyChangeReport,
   ImpactAnalyzer,
   IndexStore,
   loadConfig,
   ProjectModel,
   type ApilensConfig,
+  type AiProvider,
   type ApiUsage,
   type BackendManifest,
   type ChangeReport,
   type ContractReport,
   type FrontendIndexUpdate,
+  type FrontendManifest,
+  type VerifiedChangeReport,
 } from "@apilens/core";
 import { JavaExtractor } from "@apilens/extractor-java";
 import { TypeScriptProject } from "@apilens/extractor-typescript";
@@ -76,6 +80,44 @@ export interface GitChangeReport extends ChangeReport {
   backendChanged: boolean;
 }
 
+export interface VerifyChangesOptions extends AnalyzeBackendOptions {
+  provider: AiProvider;
+  /** Compare git refs instead of the stored contract. */
+  base?: string;
+  head?: string;
+  maxCandidatesPerEndpoint?: number;
+  concurrency?: number;
+}
+
+export interface VerifiedGitChangeReport extends VerifiedChangeReport {
+  base: string | null;
+  head: string | null;
+  backendChanged: boolean;
+}
+
+interface ChangeInputs {
+  frontend: FrontendManifest;
+  before: BackendManifest;
+  after: BackendManifest;
+  config: ApilensConfig;
+}
+
+const EMPTY_CHANGE_REPORT: ChangeReport = {
+  result: "PASS",
+  endpoints: [],
+  counts: { changedApis: 0, breakingChanges: 0, DEFINITE: 0, LIKELY: 0, POSSIBLE: 0 },
+};
+
+const EMPTY_BACKEND: BackendManifest = {
+  language: "java", rootDir: "", generatedAt: "", endpoints: [], dtos: [], enums: [], warnings: [],
+};
+
+const EMPTY_INPUTS = {
+  frontend: { language: "typescript", rootDir: "", generatedAt: "", files: [], functions: [], apiCalls: [], propertyAccesses: [] } as FrontendManifest,
+  before: EMPTY_BACKEND,
+  after: EMPTY_BACKEND,
+};
+
 export interface CheckOptions {
   files?: string[];
   changedSince?: string;
@@ -134,6 +176,45 @@ export class ApiLensWorkspace {
 
   /** Phase 4+5: diff the stored backend contract against `backendDir` now, and find affected frontend code. */
   async analyzeBackend(backendDir: string, options: AnalyzeBackendOptions = {}): Promise<ChangeReport> {
+    const inputs = await this.changeInputs(backendDir, options);
+    return analyzeChangeImpact(inputs.frontend, inputs.before, inputs.after, inputs.config);
+  }
+
+  /** Phase 7: compare the backend at two git refs and find affected frontend code. */
+  async diffBackend(backendDir: string, options: DiffBackendOptions): Promise<GitChangeReport> {
+    const refs = { base: options.base, head: options.head ?? "working tree" };
+    const inputs = await this.gitChangeInputs(backendDir, options);
+    if (!inputs) return { ...refs, backendChanged: false, ...EMPTY_CHANGE_REPORT };
+    return { ...refs, backendChanged: true, ...analyzeChangeImpact(inputs.frontend, inputs.before, inputs.after, inputs.config) };
+  }
+
+  /**
+   * Phase 6: static change analysis (against the stored contract, or between git refs when `base` is given),
+   * then AI verification of the findings static analysis could not decide.
+   */
+  async verifyChanges(backendDir: string, options: VerifyChangesOptions): Promise<VerifiedGitChangeReport> {
+    const refs = options.base ? { base: options.base, head: options.head ?? "working tree" } : { base: null, head: null };
+    const inputs = options.base
+      ? await this.gitChangeInputs(backendDir, { ...options, base: options.base })
+      : await this.changeInputs(backendDir, options);
+    if (!inputs) {
+      const empty = await verifyChangeReport(EMPTY_CHANGE_REPORT, EMPTY_INPUTS, options.provider, { readFile: () => null });
+      return { ...refs, backendChanged: false, ...empty };
+    }
+    const report = analyzeChangeImpact(inputs.frontend, inputs.before, inputs.after, inputs.config);
+    const root = inputs.frontend.rootDir;
+    const verified = await verifyChangeReport(report, inputs, options.provider, {
+      readFile: (path) => {
+        const absolute = resolve(root, path);
+        return absolute.startsWith(root + sep) && existsSync(absolute) ? readFileSync(absolute, "utf8") : null;
+      },
+      maxCandidatesPerEndpoint: options.maxCandidatesPerEndpoint,
+      concurrency: options.concurrency,
+    });
+    return { ...refs, backendChanged: true, ...verified };
+  }
+
+  private async changeInputs(backendDir: string, options: AnalyzeBackendOptions): Promise<ChangeInputs> {
     const root = resolve(backendDir);
     if (!existsSync(root)) throw new Error(`Backend directory not found: ${root}`);
     const { frontend, before, config } = this.withStore((store) => ({
@@ -146,26 +227,15 @@ export class ApiLensWorkspace {
       throw new Error("No baseline backend contract in the index. Run `apilens extract-backend <dir>` on the current backend first.");
     }
     const after = await new JavaExtractor({ jarPath: options.jarPath }).extract(root);
-    const report = analyzeChangeImpact(frontend, before, after, config);
     if (options.save) this.withStore((store) => store.writeBackendManifest(after));
-    return report;
+    return { frontend, before, after, config };
   }
 
-  /** Phase 7: compare the backend at two git refs and find affected frontend code. */
-  async diffBackend(backendDir: string, options: DiffBackendOptions): Promise<GitChangeReport> {
+  /** null when nothing under the backend directory changed between the refs. */
+  private async gitChangeInputs(backendDir: string, options: DiffBackendOptions): Promise<ChangeInputs | null> {
     const root = resolve(backendDir);
-    const head = options.head ?? "working tree";
     const model = this.model();
-    const refs = { base: options.base, head };
-    if (!hasChangesBetween(root, options.base, options.head)) {
-      return {
-        ...refs,
-        backendChanged: false,
-        result: "PASS",
-        endpoints: [],
-        counts: { changedApis: 0, breakingChanges: 0, DEFINITE: 0, LIKELY: 0, POSSIBLE: 0 },
-      };
-    }
+    if (!hasChangesBetween(root, options.base, options.head)) return null;
     const scratch = mkdtempSync(join(tmpdir(), "apilens-diff-"));
     try {
       const extractor = new JavaExtractor({ jarPath: options.jarPath });
@@ -175,7 +245,7 @@ export class ApiLensWorkspace {
         extractor.extract(beforeDir),
         extractor.extract(afterDir),
       ]);
-      return { ...refs, backendChanged: true, ...analyzeChangeImpact(model.frontend, before, after, model.config) };
+      return { frontend: model.frontend, before, after, config: model.config };
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }

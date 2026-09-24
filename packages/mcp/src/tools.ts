@@ -8,8 +8,10 @@ import {
   renderHtml,
   renderMermaid,
   type ChangeReport,
+  type VerifiedChangeReport,
 } from "@apilens/core";
-import { ApiLensWorkspace } from "@apilens/cli";
+import { ApiLensWorkspace, createAiProvider } from "@apilens/cli";
+import type { AiProvider } from "@apilens/core";
 
 export interface ApiLensToolOptions {
   /** Index database. Defaults to .apilens/index.db (relative to the server's cwd). */
@@ -21,6 +23,8 @@ export interface ApiLensToolOptions {
   backendDir?: string;
   /** Share a workspace with the host (it keeps the parsed frontend in memory between calls). */
   workspace?: ApiLensWorkspace;
+  /** AI provider for verify_api_changes; defaults to $APILENS_AI_PROVIDER or "anthropic". */
+  aiProvider?: AiProvider;
 }
 
 export interface ApiLensTool<Shape extends z.ZodRawShape = z.ZodRawShape> {
@@ -121,6 +125,30 @@ export function createApiLensTools(options: ApiLensToolOptions = {}): ApiLensToo
           `ApiLens: backend API changes ${a.base}...${a.head ?? "working tree"}`),
     }),
     tool({
+      name: "verify_api_changes",
+      title: "Verify API change impact with AI",
+      description:
+        "Run the backend change analysis (against the stored contract, or between git refs with `base`/`head`) and have " +
+        "an AI model review only the findings static analysis could not decide (LIKELY / POSSIBLE), using just the " +
+        "relevant code lines and before/after schemas. DEFINITE findings are never overridden; verdicts without evidence " +
+        "from the provided code become UNKNOWN. Needs AI credentials (e.g. ANTHROPIC_API_KEY).",
+      parameters: {
+        backendDir: z.string().optional(),
+        base: z.string().optional().describe("Compare git refs instead of the stored contract"),
+        head: z.string().optional(),
+        model: z.string().optional().describe("Model id (default: provider default)"),
+        effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+        format: reportFormat,
+      },
+      readOnly: true,
+      run: async (a) => {
+        const provider =
+          options.aiProvider ?? createAiProvider(process.env.APILENS_AI_PROVIDER ?? "anthropic", { model: a.model, effort: a.effort });
+        const verified = await ws.verifyChanges(backendDir(a.backendDir), { provider, base: a.base, head: a.head });
+        return report(verified, a.format, "ApiLens: verified API change report");
+      },
+    }),
+    tool({
       name: "impact_of_api",
       title: "Impact of changing an API",
       description:
@@ -216,7 +244,7 @@ function tool<Shape extends z.ZodRawShape>(definition: {
   } as unknown as ApiLensTool;
 }
 
-function report(value: ChangeReport, format: "json" | "markdown", title?: string) {
+function report(value: ChangeReport | VerifiedChangeReport, format: "json" | "markdown", title?: string) {
   return format === "markdown" ? { result: value.result, markdown: renderChangeReportMarkdown(value, title) } : value;
 }
 

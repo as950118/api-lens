@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sys
 
 import pytest
 
@@ -75,7 +76,7 @@ class TestWithBackend:
             return "ok"
 
         names = register_tools(mcp, lens, prefix="apilens_")
-        assert len(names) == 11
+        assert len(names) == 12
 
         async def run():
             async with fastmcp.Client(mcp) as client:
@@ -105,3 +106,15 @@ def test_missing_cli_is_reported(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(tmp_path))
     with pytest.raises(ApiLensError, match="CLI not found"):
         ApiLens(index=tmp_path / "x.db").summary()
+
+
+def test_verify_builds_the_cli_call(tmp_path):
+    fake = tmp_path / "fake_cli.py"
+    fake.write_text("import json, sys\nprint(json.dumps({'argv': sys.argv[1:]}))\n")
+    lens = ApiLens(index=tmp_path / "i.db", backend_dir="be", command=[sys.executable, str(fake)])
+    argv = lens.verify(base="origin/main", model="claude-opus-5", effort="low")["argv"]
+    assert argv[:3] == ["--index", str(tmp_path / "i.db"), "verify"]
+    assert argv[3:] == [
+        "--backend", "be", "--fail-on", "never", "--base", "origin/main",
+        "--model", "claude-opus-5", "--effort", "low", "--format", "json",
+    ]

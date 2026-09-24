@@ -1,0 +1,19 @@
+{
+  "name": "@apilens/ai-anthropic",
+  "version": "0.1.0",
+  "description": "Anthropic (Claude) provider for ApiLens AI verification",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@apilens/core": "^0.1.0",
+    "zod": "^4.1.13"
+  }
+}

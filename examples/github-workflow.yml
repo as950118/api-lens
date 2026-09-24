@@ -19,3 +19,7 @@ jobs:
         with:
           frontend: frontend
           backend: backend
+          # Optional AI verification of the findings static analysis cannot decide:
+          # ai-provider: anthropic
+        # env:
+        #   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

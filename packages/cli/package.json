@@ -11,6 +11,7 @@
     "build": "tsc -b tsconfig.json"
   },
   "dependencies": {
+    "@apilens/ai-anthropic": "^0.1.0",
     "@apilens/core": "^0.1.0",
     "@apilens/extractor-java": "^0.1.0",
     "@apilens/extractor-typescript": "^0.1.0",

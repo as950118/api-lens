@@ -1,15 +1,32 @@
 import type { ChangeReport } from "../analysis/change-impact.js";
+import type { VerifiedChangeReport, VerifiedImpactSite } from "../ai/verify.js";
 import type { ContractReport } from "../analysis/contract.js";
 
 /** Markdown for PR comments / CI job summaries. */
-export function renderChangeReportMarkdown(report: ChangeReport, title = "ApiLens: backend API change report"): string {
+export function renderChangeReportMarkdown(
+  report: ChangeReport | VerifiedChangeReport,
+  title = "ApiLens: backend API change report",
+): string {
   const c = report.counts;
+  const verified = "ai" in report ? report : null;
   const lines = [
     `## ${title}: ${report.result}`,
     "",
     `**${c.changedApis} changed API${s(c.changedApis)} · ${c.breakingChanges} breaking change${s(c.breakingChanges)} · ` +
       `frontend impact: ${c.DEFINITE} definite, ${c.LIKELY} likely, ${c.POSSIBLE} possible**`,
   ];
+  if (verified) {
+    const a = verified.ai;
+    lines.push(
+      "",
+      `AI verification (${a.provider}, \`${a.model}\`): ${a.verified} of ${a.candidates} undecided locations checked - ` +
+        `${a.counts.FAIL} fail, ${a.counts.WARNING} warning, ${a.counts.PASS} pass, ${a.counts.UNKNOWN} unknown. ` +
+        `Static analysis alone: ${verified.staticResult}. Definite findings are never overridden.`,
+    );
+    for (const [message, endpoints] of groupErrors(a.errors)) {
+      lines.push(`> AI verification error (${endpoints.join(", ")}): ${cell(message)}`);
+    }
+  }
   if (report.endpoints.length === 0) return [...lines, "", "No API changes."].join("\n");
 
   lines.push(
@@ -37,11 +54,15 @@ export function renderChangeReportMarkdown(report: ChangeReport, title = "ApiLen
       "",
       `<details${e.counts.DEFINITE ? " open" : ""}><summary>Affected frontend code (${sites.length})</summary>`,
       "",
-      "| Confidence | Location | Code | Why |",
-      "|---|---|---|---|",
-      ...sites.map((site) =>
-        `| ${site.confidence} | ${code(`${site.file}:${site.line}`)}${who(site.functionName, site.component)} | ${code(site.code)} | ${cell(site.reason)} |`,
-      ),
+      verified ? "| Confidence | AI | Location | Code | Why |" : "| Confidence | Location | Code | Why |",
+      verified ? "|---|---|---|---|---|" : "|---|---|---|---|",
+      ...(sites as VerifiedImpactSite[]).map((site) => {
+        const location = `${code(`${site.file}:${site.line}`)}${who(site.functionName, site.component)}`;
+        if (!verified) return `| ${site.confidence} | ${location} | ${code(site.code)} | ${cell(site.reason)} |`;
+        const ai = site.ai ? `${site.ai.result} (${site.ai.confidence.toFixed(2)})` : site.confidence === "DEFINITE" ? "–" : "not checked";
+        const why = site.ai ? `${cell(site.reason)}<br>**AI:** ${cell(site.ai.reason)}` : cell(site.reason);
+        return `| ${site.confidence} | ${ai} | ${location} | ${code(site.code)} | ${why} |`;
+      }),
       "",
       "</details>",
     );
@@ -86,4 +107,15 @@ function who(fn: string | null, component: string | null): string {
 
 function s(n: number): string {
   return n === 1 ? "" : "s";
+}
+
+/** "GET /x: message" entries grouped by message, so one configuration problem is reported once. */
+export function groupErrors(errors: string[]): [string, string[]][] {
+  const groups = new Map<string, string[]>();
+  for (const error of errors) {
+    const split = error.indexOf(": ");
+    const [endpoint, message] = split > 0 ? [error.slice(0, split), error.slice(split + 2)] : ["", error];
+    (groups.get(message) ?? groups.set(message, []).get(message)!).push(endpoint);
+  }
+  return [...groups.entries()];
 }

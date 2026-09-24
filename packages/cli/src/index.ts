@@ -9,6 +9,10 @@ export type {
   ExtractBackendResult,
   IndexFrontendOptions,
   IndexFrontendResult,
+  VerifiedGitChangeReport,
+  VerifyChangesOptions,
 } from "./workspace.js";
+export { createAiProvider, AI_PROVIDERS } from "./ai.js";
+export type { AiProviderName, CreateAiProviderOptions } from "./ai.js";
 export { changedSourceFiles } from "./git.js";
 export * from "./format.js";
