@@ -18,6 +18,7 @@ npm run build:jar   # Java extractor JAR (Gradle)
 npm run build
 npm test            # TS 테스트 (JAR가 있으면 Java 연동 테스트 포함)
 npm run test:jvm    # Java extractor 단위 테스트
+(cd python && uv run --group dev pytest)   # Python 바인딩 + FastMCP
 ```
 
 ## 사용법
@@ -105,6 +106,51 @@ apilens impact --api "GET /users/{id}" -f mermaid              # PR 코멘트용
 HTML 그래프는 API → 응답 필드 → 함수/컴포넌트 → 파일의 계층 그래프다. 노드를 클릭하면 연결된 전체를 추적하고,
 검색과 종류 필터, 검색 가능한 목록을 제공한다. 외부 리소스 없이 단일 파일로 동작한다.
 
+### 5. MCP / 라이브러리
+
+같은 기능을 MCP tool로 제공한다. tool: `index_frontend`, `extract_backend`, `check_contract`, `impact_of_api`,
+`impact_of_file`, `impact_of_field`, `search`, `impact_summary`, `render_graph`.
+
+**독립 MCP 서버 (stdio)** — Claude Desktop / Claude Code 등에 바로 연결:
+
+```json
+{
+  "mcpServers": {
+    "apilens": {
+      "command": "node",
+      "args": ["/path/to/api-lens/packages/mcp/dist/bin.js",
+               "--index", "/path/to/project/.apilens/index.db",
+               "--frontend", "/path/to/project/frontend",
+               "--backend", "/path/to/project/backend"]
+    }
+  }
+}
+```
+
+**기존 TypeScript fastmcp 서버에 추가** (`packages/mcp/examples/fastmcp-server.ts`):
+
+```ts
+import { FastMCP } from "fastmcp";
+import { addApiLensTools } from "@apilens/mcp";
+
+const server = new FastMCP({ name: "my-dev-tools", version: "1.0.0" });
+addApiLensTools(server, { frontendDir: "./frontend", backendDir: "./backend", prefix: "apilens_" });
+await server.start({ transportType: "stdio" });
+```
+
+**기존 Python FastMCP 서버에 추가** (`python/`, CLI의 `--format json`을 사용):
+
+```python
+from fastmcp import FastMCP
+from apilens.fastmcp import register_tools
+
+mcp = FastMCP("my-server")
+register_tools(mcp, frontend_dir="./frontend", backend_dir="./backend", prefix="apilens_")
+```
+
+다른 MCP 프레임워크에는 `createApiLensTools()`(zod schema + JSON 반환 handler)를, 코드에서 직접 쓸 때는
+`ApiLensWorkspace`(`@apilens/cli`)를 사용한다. workspace는 파싱된 frontend를 메모리에 유지해서 반복 갱신이 빠르다.
+
 ### apilens.config.json
 
 ```json
@@ -130,7 +176,7 @@ HTML 그래프는 API → 응답 필드 → 함수/컴포넌트 → 파일의 �
 | 5 | Static impact analysis | |
 | 6 | AI verification | |
 | 7 | Git diff / CI integration | |
-| - | Library API / MCP server | |
+| - | Library API / MCP (stdio 서버, TS fastmcp, Python FastMCP) | ✅ |
 
 `apilens analyze`, `apilens diff`, `apilens verify`는 커맨드만 등록되어 있고 아직 동작하지 않는다.
 

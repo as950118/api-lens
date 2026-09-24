@@ -11,9 +11,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b packages/cli",
+    "build": "tsc -b packages/cli packages/mcp",
     "build:jar": "npm run build:jar -w @apilens/extractor-java",
-    "clean": "tsc -b packages/cli --clean",
+    "clean": "tsc -b packages/cli packages/mcp --clean",
     "test": "vitest run",
     "test:jvm": "npm run test:jvm -w @apilens/extractor-java"
   },

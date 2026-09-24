@@ -1,0 +1,26 @@
+{
+  "name": "@apilens/mcp",
+  "version": "0.1.0",
+  "description": "ApiLens as MCP tools: standalone stdio server, fastmcp adapter, and framework-neutral tool definitions",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "bin": {
+    "apilens-mcp": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "@apilens/cli": "^0.1.0",
+    "@apilens/core": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "fastmcp": "^4.20.16"
+  }
+}

@@ -22,6 +22,7 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+      - uses: astral-sh/setup-uv@v6
       - run: npm ci
       - name: Build and test the Java extractor
         run: |
@@ -29,6 +30,9 @@ jobs:
           npm run test:jvm
       - run: npm run build
       - run: npm test
+      - name: Python bindings (FastMCP)
+        working-directory: python
+        run: uv run --group dev pytest -q
       - name: Smoke-test the CLI on the fixtures
         run: |
           node packages/cli/dist/bin.js index test/fixtures/frontend --config test/fixtures/apilens.config.json

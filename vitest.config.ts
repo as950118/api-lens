@@ -9,6 +9,7 @@ export default defineConfig({
       "@apilens/core": src("core"),
       "@apilens/extractor-typescript": src("extractor-typescript"),
       "@apilens/extractor-java": src("extractor-java"),
+      "@apilens/cli": src("cli"),
     },
   },
   test: {

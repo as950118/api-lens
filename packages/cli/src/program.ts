@@ -1,7 +1,15 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Command, Option } from "commander";
-import { renderHtml, renderMermaid, type ContractReport, type ImpactGraph } from "@apilens/core";
+import {
+  attachGraph,
+  mergeGraphs,
+  renderHtml,
+  renderMermaid,
+  type ContractReport,
+  type GraphAttachment,
+  type ImpactGraph,
+} from "@apilens/core";
 import {
   formatApiImpact,
   formatBackendResult,
@@ -46,20 +54,23 @@ export function buildProgram(): Command {
     .option("--changed-since <ref>", "use the TS files changed since this git ref as --files")
     .option("--check", "also check the changed files against the backend contract")
     .addOption(failOnOption())
+    .addOption(formatOption(["text", "json"], "text"))
     .option("-m, --manifest <path>", "also write the extracted manifest as JSON")
-    .action(async (frontendDir: string, opts: { files?: string[]; changedSince?: string; check?: boolean; failOn: FailOn; manifest?: string }) => {
+    .action(async (frontendDir: string, opts: { files?: string[]; changedSince?: string; check?: boolean; failOn: FailOn; format: Format; manifest?: string }) => {
       const ws = workspace();
       const result = await ws.indexFrontend(frontendDir, {
         files: opts.files,
         changedSince: opts.changedSince,
         manifestPath: opts.manifest,
       });
-      console.log(formatIndexResult(result));
-      if (opts.check) {
-        const report = ws.check({ files: result.scope ?? undefined });
-        console.log(`\n${formatContractReport(report)}`);
-        setExitCode(report, opts.failOn);
+      const report = opts.check ? ws.check({ files: result.scope ?? undefined }) : null;
+      if (opts.format === "json") {
+        console.log(JSON.stringify(report ? { ...result, check: report } : result, null, 2));
+      } else {
+        console.log(formatIndexResult(result));
+        if (report) console.log(`\n${formatContractReport(report)}`);
       }
+      if (report) setExitCode(report, opts.failOn);
     });
 
   program
@@ -68,9 +79,10 @@ export function buildProgram(): Command {
     .argument("<backendDir>", "backend project root")
     .option("-o, --out <path>", "also write the backend manifest as JSON")
     .option("--jar <path>", "Java extractor JAR (defaults to the bundled one)")
-    .action(async (backendDir: string, opts: { out?: string; jar?: string }) => {
+    .addOption(formatOption(["text", "json"], "text"))
+    .action(async (backendDir: string, opts: { out?: string; jar?: string; format: Format }) => {
       const result = await workspace().extractBackend(backendDir, { outPath: opts.out, jarPath: opts.jar });
-      console.log(formatBackendResult(result, opts.out));
+      console.log(opts.format === "json" ? JSON.stringify(result, null, 2) : formatBackendResult(result, opts.out));
     });
 
   program
@@ -95,8 +107,13 @@ export function buildProgram(): Command {
     .option("--search <text>", "search APIs, files, functions, components, DTOs and fields")
     .option("--summary", "rank every API and file by impact")
     .addOption(formatOption(["text", "json", "mermaid", "html"], "text"))
+    .addOption(
+      new Option("--graph <mode>", "with --format json: include the graph as json, as mermaid text, or not at all")
+        .choices(["none", "mermaid", "json"])
+        .default("json"),
+    )
     .option("-o, --out <path>", "write the output to a file")
-    .action((opts: { api?: string; file?: string; field?: string; search?: string; summary?: boolean; format: Format; out?: string }) => {
+    .action((opts: { api?: string; file?: string; field?: string; search?: string; summary?: boolean; format: Format; graph: GraphAttachment; out?: string }) => {
       const ws = workspace();
       const analyzer = ws.impact();
       let value: unknown;
@@ -105,19 +122,19 @@ export function buildProgram(): Command {
       let title: string;
       if (opts.api) {
         const impacts = analyzer.impactOfApi(opts.api);
-        value = impacts;
+        value = impacts.map((i) => attachGraph(i, opts.graph));
         text = formatApiImpact(impacts, opts.api);
         graph = mergeGraphs(impacts.map((i) => i.graph));
         title = `Impact of ${opts.api}`;
       } else if (opts.file) {
         const impact = analyzer.impactOfFile(ws.toIndexPath(opts.file));
-        value = impact;
+        value = attachGraph(impact, opts.graph);
         text = formatFileImpact(impact);
         graph = impact.graph;
         title = `Impact of changing ${impact.file}`;
       } else if (opts.field) {
         const impacts = analyzer.impactOfField(opts.field);
-        value = impacts;
+        value = impacts.map((i) => attachGraph(i, opts.graph));
         text = formatFieldImpact(impacts, opts.field);
         graph = mergeGraphs(impacts.map((i) => i.graph));
         title = `Impact of ${opts.field}`;
@@ -186,12 +203,6 @@ function emit(output: string, out?: string): void {
   mkdirSync(dirname(resolve(out)), { recursive: true });
   writeFileSync(out, output);
   console.log(`Wrote ${resolve(out)}`);
-}
-
-function mergeGraphs(graphs: ImpactGraph[]): ImpactGraph {
-  const nodes = new Map(graphs.flatMap((g) => g.nodes).map((n) => [n.id, n]));
-  const edges = new Map(graphs.flatMap((g) => g.edges).map((e) => [`${e.from}->${e.to}`, e]));
-  return { nodes: [...nodes.values()], edges: [...edges.values()] };
 }
 
 function setExitCode(report: ContractReport, failOn: FailOn): void {

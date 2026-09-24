@@ -62,3 +62,16 @@ function className(node: GraphNode): string | null {
 function escape(text: string): string {
   return text.replace(/"/g, "#quot;").replace(/</g, "#lt;").replace(/>/g, "#gt;");
 }
+
+export type GraphAttachment = "none" | "mermaid" | "json";
+
+/** Replaces an impact result's `graph` with Mermaid text, keeps it, or drops it (for compact JSON output). */
+export function attachGraph<T extends { graph: ImpactGraph }>(
+  value: T,
+  mode: GraphAttachment,
+): Omit<T, "graph"> & { graph?: ImpactGraph; mermaid?: string } {
+  const { graph, ...rest } = value;
+  if (mode === "json") return { ...rest, graph };
+  if (mode === "mermaid") return { ...rest, mermaid: renderMermaid(graph) };
+  return rest;
+}

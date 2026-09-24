@@ -135,6 +135,13 @@ export function buildGraph(model: ProjectModel, selection: GraphSelection): Impa
   return { nodes: [...nodes.values()], edges: [...edges.values()] };
 }
 
+/** Union of several graphs (e.g. the impact of every endpoint matching a query). */
+export function mergeGraphs(graphs: ImpactGraph[]): ImpactGraph {
+  const nodes = new Map(graphs.flatMap((g) => g.nodes).map((n) => [n.id, n]));
+  const edges = new Map(graphs.flatMap((g) => g.edges).map((e) => [`${e.from}->${e.to}`, e]));
+  return { nodes: [...nodes.values()], edges: [...edges.values()] };
+}
+
 function computeImpact(nodes: Map<string, GraphNode>, edges: GraphEdge[]): void {
   const out = new Map<string, string[]>();
   const into = new Map<string, string[]>();

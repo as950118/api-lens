@@ -71,6 +71,7 @@ packages/
 ├── extractor-java/        Phase 2: Spring backend 분석
 │   ├── jvm/               JavaParser 기반 extractor (Gradle → apilens-java-extractor.jar)
 │   └── src/               JavaExtractor (JAR를 subprocess로 실행)
+├── mcp/                   MCP: stdio 서버, fastmcp adapter, tool 정의 (python/ 은 Python 바인딩)
 └── cli/                   apilens 바이너리
     └── src/
         ├── workspace.ts   ApiLensWorkspace — CLI/MCP가 공유하는 라이브러리 진입점
@@ -291,16 +292,28 @@ endpoint ──has-field──▶ field ──reads──▶ reading fn/componen
 - `--format html`: 외부 요청 없는 단일 HTML. 계층 레이아웃, 검색, 종류 필터, 노드 클릭 시 상·하류 추적과 상세 패널, 검색 가능한 목록, 라이트/다크.
 - `--format mermaid`: PR 코멘트·문서용. `--format json`: 다른 도구용.
 
-## 12. Library / MCP
+## 12. Library / MCP (구현됨)
 
-CLI는 얇은 래퍼이고 기능은 `ApiLensWorkspace`(`packages/cli/src/workspace.ts`)와 `@apilens/core`의 순수 함수로
-제공된다. 모든 결과는 JSON 직렬화 가능한 객체이고 CLI는 `--format json`으로 그대로 출력한다.
+```text
+                 ┌───────────────────────── @apilens/mcp ─────────────────────────┐
+ MCP client ───▶ │ apilens-mcp (stdio, 공식 SDK)   addApiLensTools(fastmcp server) │
+                 │            └──────── createApiLensTools() ─────────┘           │
+                 └──────────────────────────────┬─────────────────────────────────┘
+ Python FastMCP ─▶ apilens (python) ─▶ CLI --format json ─┐
+                                                          ▼
+                                   ApiLensWorkspace (@apilens/cli) ─▶ @apilens/core + extractors
+```
 
-- **TypeScript MCP (fastmcp 등)**: `ApiLensWorkspace`를 import해 tool로 등록. workspace가 `TypeScriptProject`를
-  메모리에 유지하므로 `indexFrontend(dir, { files })`는 바뀐 파일만 다시 읽는다.
-- **Python FastMCP**: `apilens ... --format json`을 subprocess로 호출하는 얇은 Python 래퍼.
-- tool 후보: `index_frontend`, `extract_backend`, `check_contract`, `impact_of_api`, `impact_of_file`,
-  `impact_of_field`, `search`, `impact_summary`, `render_graph`(mermaid).
+- **`createApiLensTools(options)`**: 프레임워크 중립 tool 정의(zod schema + JSON 결과 handler, read-only annotation).
+  나머지는 모두 이 정의를 등록만 한다.
+- **`apilens-mcp`**: 공식 `@modelcontextprotocol/sdk` 기반 stdio 서버. `--index/--frontend/--backend/--config`
+  (또는 `APILENS_*` env)로 기본 경로를 주면 client는 경로를 몰라도 된다. 오류는 `isError` 결과로 반환.
+- **`addApiLensTools(fastmcpServer, { prefix })`**: TypeScript `fastmcp`의 `addTool`에 그대로 등록(실제 fastmcp
+  타입으로 type-check, HTTP 통합 테스트).
+- **Python `apilens`**: CLI의 JSON 출력을 감싸는 `ApiLens` 클래스와 `apilens.fastmcp.register_tools(mcp)`.
+  분석 로직은 Node 쪽 한 곳에만 있고 Python은 호출만 한다(동작이 갈라지지 않음).
+- 상주 프로세스(MCP)에서는 workspace가 `TypeScriptProject`를 유지하므로 `index_frontend(files=...)`가 바뀐 파일만 다시 읽는다.
+- impact 결과의 graph는 `graph: none | mermaid | json`으로 크기를 조절한다(LLM에는 mermaid가 간결).
 
 ## 13. CI/CD (Phase 7)
 
