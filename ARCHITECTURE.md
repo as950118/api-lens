@@ -65,11 +65,14 @@ packages/
 │       ├── extractor.ts   Manifest 생성
 │       ├── endpoint.ts    URL 표현식 → path pattern 정규화
 │       └── config.ts      apilens.config.json
+├── extractor-java/        Phase 2: Spring backend 분석
+│   ├── jvm/               JavaParser 기반 extractor (Gradle → apilens-java-extractor.jar)
+│   └── src/               JavaExtractor (JAR를 subprocess로 실행)
 └── cli/                   apilens 바이너리
 ```
 
-Phase 2에서 `packages/extractor-java/`(Gradle, JavaParser)가 추가된다. npm workspace에는 포함하지 않고
-빌드된 JAR를 CLI가 `SubprocessExtractor`로 실행한다.
+`packages/extractor-java/`는 두 부분으로 되어 있다: `jvm/`(Gradle, JavaParser → fat JAR)과 이를 실행하는
+Node 래퍼 `src/`(`JavaExtractor`, `SubprocessExtractor` 사용).
 
 ## 3. Data model (IR)
 
@@ -129,14 +132,31 @@ shadowing이나 다른 파일에서 import한 함수도 정확히 구분된다. 
 URL은 정적으로 해석 가능한 경우만 패턴화한다: 문자열, 템플릿 리터럴(`` `/users/${id}` ``), 문자열 연결(`"/users/" + id`)은
 `/users/{param}`이 되고, 완전히 동적인 URL은 `null`로 둔다(추측하지 않음).
 
-## 5. Java API 분석 방법 (Phase 2)
+## 5. Java API 분석 방법 (Phase 2, 구현됨)
 
-- 독립 Java 모듈이 JavaParser + JavaSymbolSolver로 소스를 파싱한다.
-- `@GetMapping/@PostMapping/@PutMapping/@DeleteMapping/@PatchMapping/@RequestMapping` 메서드 → `EndpointInfo`.
-  클래스 레벨 `@RequestMapping` prefix를 합친다.
-- `@PathVariable/@RequestParam/@RequestHeader/@RequestBody` → request 정보, 반환 타입(`ResponseEntity<T>`, `List<T>` unwrap) → response DTO.
-- DTO 필드는 상속 체인을 SymbolSolver로 해석해 flatten. `record`, Lombok(`@Data`, `@Getter`)은 필드 기준. `@JsonProperty` 이름 반영, `@Nullable`/`Optional` → nullable.
-- `BackendManifest` JSON을 stdout으로 출력.
+`packages/extractor-java/jvm` — JavaParser 기반 독립 JAR. `java -jar apilens-java-extractor.jar <backendDir>` →
+stdout에 `BackendManifest` JSON. Node 쪽 `@apilens/extractor-java`가 `SubprocessExtractor`로 실행한다.
+JDK 17+에서 동작하며 CLI는 `apilens extract-backend <dir>`.
+
+**이름 해석은 소스만으로 한다.** JavaSymbolSolver는 정확한 해석을 위해 Spring·Lombok 등 의존성 JAR 전체를 classpath로
+요구하는데, 이는 CI에서 backend를 빌드해야 한다는 뜻이다. 대신 `SourceIndex`가 import / 같은 package /
+nested type / wildcard import / static import 규칙으로 프로젝트 타입과 상수를 결정적으로 해석한다.
+프로젝트 밖의 타입은 알려진 목록(String, List, Map, ResponseEntity, Page 등)으로 처리하고 나머지는 `unknown`으로 남긴다.
+
+**Endpoint**
+- `@RestController`, `@Controller`(+`@ResponseBody` 또는 `ResponseEntity` 반환), mapping이 있는 interface. `@FeignClient`/`@HttpExchange`(client)와 `src/test`는 제외.
+- `@Get/Post/Put/Delete/PatchMapping`, `@RequestMapping(method=...)`(method 생략 시 5개 전부). 클래스 레벨 prefix × 메서드 path 조합.
+- path의 상수 참조(`ApiPaths.USERS`, static import, `A + "/x"`)를 해석. 해석 불가 시 `<expr>` 그대로 두고 warning.
+- `@PathVariable/@RequestParam/@RequestHeader`(name, required, defaultValue, Optional), `@RequestBody`(required).
+  어노테이션 없는 단순 타입은 선택 query param, 객체는 필드별 query param(`@ModelAttribute` 동작). `Pageable`, `HttpServletRequest` 등 framework 파라미터는 제외.
+- 반환 타입에서 `ResponseEntity/Optional/CompletableFuture/Mono/DeferredResult/...` 를 벗기고 `Flux<T>`는 배열, `void`/`Void`는 body 없음.
+
+**DTO (Jackson 기준 JSON 형태)**
+- endpoint에서 도달 가능한 타입만 수집. 상위 클래스 필드 flatten(제네릭 상위 타입은 타입 인자 치환), record component, public getter(`getX`/`isX`), interface projection.
+- `@JsonProperty` 이름, `@JsonIgnore`, `@JsonIgnoreProperties`, `@JsonNaming`(snake/kebab/...), `static`/`transient` 제외.
+- nullable: primitive → false, `@NotNull/@NonNull/@NotBlank/@NotEmpty` → false, `@Nullable`/`Optional` → true, 나머지 참조 타입 → true.
+- Enum 값(`@JsonProperty` 반영), Spring Data `Page<T>`/`Slice<T>`는 실제 JSON 모양(`content`, `totalElements`...)의 DTO로 모델링.
+- 알려진 한계: 전역 Jackson 설정(`spring.jackson.property-naming-strategy`), `@JsonUnwrapped`, `@JsonValue` enum(warning), Kotlin 소스.
 
 ## 6. API ↔ TypeScript 연결 방법 (Phase 3)
 
@@ -208,7 +228,29 @@ interface AiProvider {
 - DEFINITE finding은 AI가 뒤집을 수 없다. AI는 POSSIBLE/LIKELY 해석과 설명 생성에만 쓴다.
 - Provider(Anthropic, OpenAI, Local LLM)는 이 인터페이스만 구현한다.
 
-## 11. CI/CD (Phase 7)
+## 11. Frontend 변경 검사 · 영향 범위 탐색 (Phase 3 확장)
+
+Backend 변경뿐 아니라 **Frontend 변경**도 같은 index로 검사한다.
+
+- **Incremental index**: 변경된 TS 파일만 다시 분석해 해당 파일의 `api_calls`/`property_accesses`를 교체한다.
+  wrapper 함수가 있는 파일이 바뀌면 그 wrapper를 호출하는 파일도 재분석 대상에 넣는다(import 관계 사용).
+- **Contract check**: 변경된 TS 파일이 호출하는 API 목록을 index에서 찾고, 실제 `BackendManifest`와 비교한다.
+  - endpoint 없음 (method/path 불일치)
+  - response에 없는 필드 접근 (`user.nmae`, 삭제된 필드)
+  - 필수 path/query 파라미터 누락, request body 필드 불일치
+- **Impact explorer** (실제 변경 없이 "이걸 고치면 어디까지 영향이 가나"):
+  - `apilens impact --api "GET /users/{id}"` → 호출하는 함수 · 컴포넌트 · 파일 · 필드 접근 목록
+  - `apilens impact --file src/pages/User.tsx` → 이 파일이 의존하는 API 목록, 그 API를 공유하는 다른 파일
+  - `apilens impact --field UserResponse.name` → 해당 필드를 읽는 모든 위치
+  - 출력: 텍스트/JSON(검색·필터용) + 그래프(API → 함수 → 컴포넌트 → 파일). 그래프는 인터랙티브 HTML과 Mermaid로 export.
+
+## 12. Library / MCP
+
+CLI는 얇은 래퍼이고 분석 기능은 라이브러리 API로 제공한다(`indexFrontend`, `extractBackend`, `checkContract`,
+`findImpact`, ...). 모든 결과는 JSON 직렬화 가능한 객체다. 이를 기반으로 MCP server(tool: `index_frontend`,
+`impact_of_api`, `impact_of_file`, `check_contract` 등)를 제공하거나 기존 MCP 서버에 tool로 이식할 수 있다.
+
+## 13. CI/CD (Phase 7)
 
 ```text
 git push → CI → apilens diff --base <base> --head HEAD

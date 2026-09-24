@@ -17,8 +17,19 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
       - run: npm ci
+      - name: Build and test the Java extractor
+        run: |
+          npm run build:jar
+          npm run test:jvm
       - run: npm run build
       - run: npm test
-      - name: Smoke-test the CLI on the fixture frontend
-        run: node packages/cli/dist/bin.js index test/fixtures/frontend --config test/fixtures/apilens.config.json --out .apilens/index.db
+      - name: Smoke-test the CLI on the fixtures
+        run: |
+          node packages/cli/dist/bin.js index test/fixtures/frontend --config test/fixtures/apilens.config.json --out .apilens/index.db
+          node packages/cli/dist/bin.js extract-backend test/fixtures/backend --out .apilens/backend.json

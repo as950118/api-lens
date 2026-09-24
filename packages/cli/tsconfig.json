@@ -4,6 +4,18 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src"],
-  "references": [{ "path": "../core" }, { "path": "../extractor-typescript" }]
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../extractor-java"
+    },
+    {
+      "path": "../extractor-typescript"
+    }
+  ]
 }

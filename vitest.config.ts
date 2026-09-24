@@ -8,6 +8,7 @@ export default defineConfig({
     alias: {
       "@apilens/core": src("core"),
       "@apilens/extractor-typescript": src("extractor-typescript"),
+      "@apilens/extractor-java": src("extractor-java"),
     },
   },
   test: {

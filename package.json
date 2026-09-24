@@ -12,8 +12,10 @@
   ],
   "scripts": {
     "build": "tsc -b packages/cli",
+    "build:jar": "npm run build:jar -w @apilens/extractor-java",
     "clean": "tsc -b packages/cli --clean",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:jvm": "npm run test:jvm -w @apilens/extractor-java"
   },
   "devDependencies": {
     "@types/node": "^24.13.6",

@@ -1,4 +1,8 @@
 import { Command } from "commander";
+import {
+  formatBackendSummary,
+  runExtractBackendCommand,
+} from "./commands/extract-backend-command.js";
 import { formatIndexSummary, runIndexCommand } from "./commands/index-command.js";
 
 export function buildProgram(): Command {
@@ -18,6 +22,17 @@ export function buildProgram(): Command {
     .action(async (frontendDir: string, opts: { config?: string; out: string; manifest?: string }) => {
       const result = await runIndexCommand(frontendDir, opts);
       console.log(formatIndexSummary(result));
+    });
+
+  program
+    .command("extract-backend")
+    .description("Extract the API contract (endpoints, DTOs) from a Spring Boot backend")
+    .argument("<backendDir>", "backend project root")
+    .option("-o, --out <path>", "manifest JSON path", ".apilens/backend.json")
+    .option("--jar <path>", "Java extractor JAR (defaults to the bundled one)")
+    .action(async (backendDir: string, opts: { out: string; jar?: string }) => {
+      const manifest = await runExtractBackendCommand(backendDir, opts);
+      console.log(formatBackendSummary(manifest, opts.out));
     });
 
   for (const [name, phase, description] of [

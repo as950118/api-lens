@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { IndexStore } from "@apilens/core";
+import { DEFAULT_JAR_PATH } from "@apilens/extractor-java";
+import { runExtractBackendCommand } from "../src/commands/extract-backend-command.js";
 import { runIndexCommand } from "../src/commands/index-command.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -89,4 +91,29 @@ describe("apilens index", () => {
       expect(out).toMatch(/API calls:\s+10 \(10 with resolved endpoint\)/);
     },
   );
+});
+
+describe("apilens extract-backend", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "apilens-cli-backend-"));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it.skipIf(!existsSync(DEFAULT_JAR_PATH))("writes the backend manifest", async () => {
+    const out = join(dir, "backend.json");
+    const manifest = await runExtractBackendCommand(join(fixtures, "backend"), { out });
+    expect(manifest.endpoints).toHaveLength(10);
+    expect(JSON.parse(readFileSync(out, "utf8")).endpoints).toHaveLength(10);
+  });
+
+  it("rejects a missing backend directory", async () => {
+    await expect(
+      runExtractBackendCommand(join(dir, "missing"), { out: join(dir, "b.json") }),
+    ).rejects.toThrow("Backend directory not found");
+  });
 });

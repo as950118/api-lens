@@ -8,14 +8,16 @@ AI는 정적으로 확정할 수 없는 부분을 검증하는 데만 쓴다. �
 ## 요구사항
 
 - Node.js 22.13+ (내장 `node:sqlite` 사용)
-- (Phase 2부터) Java backend 분석 시 JDK 17+
+- Java backend 분석 시 JDK 17+
 
 ## 설치 & 빌드
 
 ```bash
 npm install
+npm run build:jar   # Java extractor JAR (Gradle)
 npm run build
-npm test
+npm test            # TS 테스트 (JAR가 있으면 Java 연동 테스트 포함)
+npm run test:jvm    # Java extractor 단위 테스트
 ```
 
 ## 사용법
@@ -54,6 +56,24 @@ users.map((u) => u.name)                   // → [].name
 transform(user).name                       // → name (derived: 확실하지 않음)
 ```
 
+### Backend API 추출 (Spring Boot)
+
+```bash
+node packages/cli/dist/bin.js extract-backend ./backend --out .apilens/backend.json
+```
+
+```text
+ApiLens backend manifest written to /path/.apilens/backend.json
+  Endpoints:  10
+  DTOs:       9
+  Enums:      1
+  Warnings:   0
+```
+
+Endpoint(method, path, handler, path/query/header 파라미터, request body, response 타입)와 응답 DTO의 JSON 필드
+(상속, record, getter, `@JsonProperty`, `@JsonIgnore`, `@JsonNaming`, nullable, enum, `Page<T>`)를 추출한다.
+backend를 빌드하지 않고 소스만 읽는다.
+
 ### apilens.config.json
 
 Endpoint를 자동으로 추론할 수 없는 API client(예: 제네릭 `request({ method, url })` 헬퍼)는 명시적으로 매핑한다.
@@ -71,12 +91,14 @@ Endpoint를 자동으로 추론할 수 없는 API client(예: 제네릭 `request
 | Phase | 내용 | 상태 |
 |---|---|---|
 | 1 | TypeScript AST 분석 + Index | ✅ |
-| 2 | Java Spring API 분석 (JavaParser) | |
-| 3 | Backend API ↔ Frontend 호출 연결 | |
+| 2 | Java Spring API 분석 (JavaParser) | ✅ |
+| 3 | Backend API ↔ Frontend 호출 연결, Frontend 변경 시 contract check, incremental index | |
+| 3+ | 영향 범위 탐색 (API/파일/필드 → 영향 목록, 그래프) | |
 | 4 | API 변경 감지 | |
 | 5 | Static impact analysis | |
 | 6 | AI verification | |
 | 7 | Git diff / CI integration | |
+| - | Library API / MCP server | |
 
 `apilens analyze`, `apilens diff`, `apilens verify`는 커맨드만 등록되어 있고 아직 동작하지 않는다.
 

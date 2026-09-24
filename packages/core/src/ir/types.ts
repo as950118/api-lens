@@ -106,49 +106,81 @@ export interface FrontendManifest {
 }
 
 // ---------------------------------------------------------------------------
-// Backend IR (schema stable now, populated starting Phase 2)
+// Backend IR (Phase 2)
 // ---------------------------------------------------------------------------
+
+/**
+ * Structural description of a serialized (JSON) type. Recursive so the diff
+ * engine can compare request/response shapes field by field, regardless of
+ * which backend language produced them.
+ */
+export type TypeRef =
+  /** string, number, boolean, date-like values. `name` is the source-language type, e.g. "Long". */
+  | { kind: "scalar"; name: string }
+  | { kind: "dto"; dtoId: string; typeArguments: TypeRef[] }
+  | { kind: "enum"; enumId: string }
+  | { kind: "array"; element: TypeRef }
+  | { kind: "map"; value: TypeRef }
+  /** A generic parameter of the enclosing DTO, e.g. `T` in `ApiResponse<T>`. */
+  | { kind: "typeParameter"; name: string }
+  /** A type ApiLens could not resolve (e.g. from an external library). */
+  | { kind: "unknown"; name: string };
 
 export interface ParamInfo {
   name: string;
-  type: string;
+  type: TypeRef;
   required: boolean;
-  source: "path" | "query" | "body" | "header";
+  source: "path" | "query" | "header";
 }
 
 export interface DtoFieldInfo {
+  /** Serialized (JSON) name, after @JsonProperty etc. */
   name: string;
-  type: string;
+  type: TypeRef;
   nullable: boolean;
 }
 
 export interface DtoInfo {
+  /** Fully qualified name, e.g. "com.example.user.UserResponse". */
   id: string;
   name: string;
+  typeParameters: string[];
   fields: DtoFieldInfo[];
   location: SourceLocation;
 }
 
-export interface DtoRef {
-  dtoId: string;
-  /** true when the type is a collection of the referenced DTO, e.g. List<UserResponse>. */
-  isArray: boolean;
-}
-
-export interface EndpointInfo {
+export interface EnumInfo {
   id: string;
-  method: HttpMethod;
-  path: string;
-  requestParams: ParamInfo[];
-  requestBody: DtoRef | null;
-  responseType: DtoRef | null;
+  name: string;
+  values: string[];
   location: SourceLocation;
 }
 
+export interface EndpointInfo {
+  /** `${method} ${path}`, e.g. "GET /users/{id}". */
+  id: string;
+  method: HttpMethod;
+  /** Path as declared in the backend, e.g. "/users/{id}". */
+  path: string;
+  /** Source-level handler, e.g. "com.example.user.UserController#getUser". */
+  handler: string;
+  requestParams: ParamInfo[];
+  requestBody: { type: TypeRef; required: boolean } | null;
+  /** Null when the handler returns no body (void, ResponseEntity<Void>). */
+  response: TypeRef | null;
+  location: SourceLocation;
+}
+
+export type BackendLanguage = "java";
+
 export interface BackendManifest {
-  language: "java";
+  language: BackendLanguage;
   rootDir: string;
   generatedAt: string;
   endpoints: EndpointInfo[];
+  /** DTOs reachable from endpoint requests/responses. */
   dtos: DtoInfo[];
+  enums: EnumInfo[];
+  /** Things the extractor could not analyze precisely (parse errors, unresolved constants, ...). */
+  warnings: string[];
 }

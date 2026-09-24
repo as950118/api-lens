@@ -6,3 +6,5 @@ dist/
 *.db-journal
 coverage/
 .DS_Store
+packages/extractor-java/jvm/build/
+.gradle/

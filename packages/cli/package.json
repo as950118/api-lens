@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@apilens/core": "^0.1.0",
+    "@apilens/extractor-java": "^0.1.0",
     "@apilens/extractor-typescript": "^0.1.0",
     "commander": "^15.0.0"
   }
