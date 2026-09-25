@@ -15,11 +15,13 @@
     "build:jar": "npm run build:jar -w @apilens/extractor-java",
     "clean": "tsc -b packages/cli packages/mcp --clean",
     "test": "vitest run",
-    "test:jvm": "npm run test:jvm -w @apilens/extractor-java"
+    "test:jvm": "npm run test:jvm -w @apilens/extractor-java",
+    "pack:all": "node scripts/pack-all.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.13.6",
     "typescript": "^6.0.3",
     "vitest": "^5.0.1"
-  }
+  },
+  "license": "Apache-2.0"
 }

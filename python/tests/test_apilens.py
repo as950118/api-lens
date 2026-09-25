@@ -108,6 +108,15 @@ def test_missing_cli_is_reported(tmp_path, monkeypatch):
         ApiLens(index=tmp_path / "x.db").summary()
 
 
+def test_falls_back_to_the_matching_npm_release(tmp_path, monkeypatch):
+    import apilens
+    from apilens import client
+
+    monkeypatch.delenv("APILENS_CLI")
+    monkeypatch.setattr(client.shutil, "which", lambda name: "/usr/bin/npx" if name == "npx" else None)
+    assert client._default_command() == ["/usr/bin/npx", "--yes", f"@apilens/cli@{apilens.__version__}"]
+
+
 def test_verify_builds_the_cli_call(tmp_path):
     fake = tmp_path / "fake_cli.py"
     fake.write_text("import json, sys\nprint(json.dumps({'argv': sys.argv[1:]}))\n")

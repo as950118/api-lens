@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createApiLensTools, type ApiLensToolOptions } from "./tools.js";
 
 export const SERVER_NAME = "apilens";
-export const SERVER_VERSION = "0.1.0";
+export const SERVER_VERSION: string = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 
 /** A standalone MCP server (official SDK) exposing every ApiLens tool. Connect it to any transport. */
 export function createApiLensMcpServer(options: ApiLensToolOptions = {}): McpServer {

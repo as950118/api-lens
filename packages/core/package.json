@@ -1,11 +1,42 @@
 {
   "name": "@apilens/core",
   "version": "0.1.0",
+  "description": "Language-agnostic ApiLens engine: IR, SQLite index, API linking, contract checks, change impact, AI verification",
+  "keywords": [
+    "apilens",
+    "api",
+    "contract",
+    "static-analysis",
+    "breaking-changes"
+  ],
+  "license": "Apache-2.0",
+  "author": "Heonjin Jeong",
+  "homepage": "https://github.com/heonjinjeong/api-lens#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heonjinjeong/api-lens.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/heonjinjeong/api-lens/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "!**/*.tsbuildinfo"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "tsc -b tsconfig.json"

@@ -11,3 +11,10 @@ packages/extractor-java/jvm/build/
 __pycache__/
 .venv/
 .pytest_cache/
+dist-packages/
+packages/*/LICENSE
+python/LICENSE
+python/dist/
+plugins/*/build/
+plugins/*/target/
+plugins/*/.gradle/

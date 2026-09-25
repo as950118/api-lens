@@ -5,6 +5,55 @@ Backend API가 바뀌었을 때, 기존 Frontend 코드 중 **무엇을 고쳐�
 Frontend를 미리 인덱싱해두고, API가 바뀌면 그 API와 연결된 코드만 찾아 정적 분석한다.
 AI는 정적으로 확정할 수 없는 부분을 검증하는 데만 쓴다. 설계는 [ARCHITECTURE.md](./ARCHITECTURE.md) 참고.
 
+## 설치
+
+| 사용처 | 설치 |
+|---|---|
+| CLI (npm) | `npm install -g @apilens/cli` → `apilens ...` |
+| MCP 서버 | `npx -y @apilens/mcp --frontend ... --backend ...` |
+| Node/TS 라이브러리 | `npm install @apilens/cli` (`ApiLensWorkspace`, `runCi`) / `@apilens/mcp` |
+| Python / FastMCP | `pip install "api-lens[fastmcp]"` (import 이름 `apilens`) |
+| Gradle | `plugins { id("io.github.heonjinjeong.apilens") version "0.1.0" }` |
+| Maven | `io.github.heonjinjeong:apilens-maven-plugin:0.1.0` |
+
+모든 형태가 같은 CLI(`@apilens/cli`)를 실행한다. Python과 Gradle/Maven 플러그인은 `apilens`가 PATH에 없으면
+같은 버전을 `npx`로 자동 실행하므로, 실행 환경에 Node.js 22.13+(와 backend 분석용 Java 17+)만 있으면 된다.
+
+### Gradle
+
+```kotlin
+plugins { id("io.github.heonjinjeong.apilens") version "0.1.0" }
+
+apilens {
+    frontendDir = file("../frontend")
+    // backendDir = 현재 프로젝트 (기본)
+    // failOn = "definite" | "likely" | "possible" | "never"
+    // checkFailOn = "error" | "warning" | "never"
+    // aiProvider = "anthropic"          // ANTHROPIC_API_KEY
+}
+tasks.check { dependsOn("apilensCheck") }
+```
+
+`./gradlew apilensCheck -Papilens.base=origin/main` — git 기준 비교. base가 없으면 `build/apilens/index.db`에 저장된
+이전 계약과 비교한다(첫 실행이 기준이 된다). 리포트: `build/apilens/report.md`.
+
+### Maven
+
+```xml
+<plugin>
+  <groupId>io.github.heonjinjeong</groupId>
+  <artifactId>apilens-maven-plugin</artifactId>
+  <version>0.1.0</version>
+  <executions><execution><goals><goal>check</goal></goals></execution></executions>
+  <configuration>
+    <frontendDir>${project.basedir}/../frontend</frontendDir>
+    <!-- <base>origin/main</base> <failOn>definite</failOn> <checkFailOn>error</checkFailOn> -->
+  </configuration>
+</plugin>
+```
+
+`mvn verify -Dapilens.base=origin/main` (`verify` 단계에 연결됨). 리포트: `target/apilens/report.md`.
+
 ## 요구사항
 
 - Node.js 22.13+ (내장 `node:sqlite` 사용)
@@ -255,6 +304,12 @@ register_tools(mcp, frontend_dir="./frontend", backend_dir="./backend", prefix="
 | 6 | AI verification (provider 추상화, Anthropic 구현, evidence 검증) | ✅ |
 | 7 | Git diff / CI integration (GitHub Action, CI script, Markdown 리포트) | ✅ |
 | - | Library API / MCP (stdio 서버, TS fastmcp, Python FastMCP) | ✅ |
+| - | 배포: npm, PyPI, Gradle/Maven 플러그인 | ✅ (게시 준비 완료) |
+
+## 릴리스
+
+`node scripts/set-version.mjs <version>` → 커밋 → `git tag v<version> && git push --tags`. 태그가 push되면
+`.github/workflows/release.yml`이 npm, PyPI, Maven Central, Gradle Plugin Portal에 게시한다. 최초 설정은 [RELEASING.md](./RELEASING.md).
 
 ## 새 언어 추가
 

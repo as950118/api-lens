@@ -33,6 +33,12 @@ jobs:
       - name: Python bindings (FastMCP)
         working-directory: python
         run: uv run --group dev pytest -q
+      - name: Gradle plugin
+        working-directory: plugins/gradle
+        run: ./gradlew test validatePlugins
+      - name: Maven plugin
+        working-directory: plugins/maven
+        run: mvn -B verify
       - name: Smoke-test the CLI on the fixtures
         run: |
           node packages/cli/dist/bin.js index test/fixtures/frontend --config test/fixtures/apilens.config.json

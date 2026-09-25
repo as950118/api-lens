@@ -16,3 +16,5 @@ export { createAiProvider, AI_PROVIDERS } from "./ai.js";
 export type { AiProviderName, CreateAiProviderOptions } from "./ai.js";
 export { changedSourceFiles } from "./git.js";
 export * from "./format.js";
+export { runCi } from "./ci.js";
+export type { CiOptions, CiResult, CheckFailOn, ImpactFailOn, VerifyFailOn } from "./ci.js";

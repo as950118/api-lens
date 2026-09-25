@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>it.apilens</groupId>
+  <artifactId>check-fail</artifactId>
+  <version>1.0</version>
+  <packaging>pom</packaging>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>@project.groupId@</groupId>
+        <artifactId>@project.artifactId@</artifactId>
+        <version>@project.version@</version>
+        <executions>
+          <execution><goals><goal>check</goal></goals></execution>
+        </executions>
+        <configuration>
+          <frontendDir>${fixtures}/frontend</frontendDir>
+          <backendDir>${fixtures}/backend</backendDir>
+          <config>${fixtures}/apilens.config.json</config>
+          <checkFailOn>error</checkFailOn>
+          <command><param>node</param><param>${apilensCli}</param></command>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

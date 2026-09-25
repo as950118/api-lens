@@ -251,6 +251,10 @@ export class ApiLensWorkspace {
     }
   }
 
+  hasBackendBaseline(): boolean {
+    return this.withStore((store) => store.readBackendManifest() !== null);
+  }
+
   model(): ProjectModel {
     return this.withStore((store) => {
       const frontend = store.readFrontendManifest();

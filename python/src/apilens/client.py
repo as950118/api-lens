@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
+from ._version import __version__
+
 GraphMode = Literal["none", "mermaid", "json"]
 
 
@@ -19,14 +21,19 @@ class ApiLensError(RuntimeError):
 
 
 def _default_command() -> list[str]:
+    """$APILENS_CLI, then `apilens` on PATH, then the matching npm release through npx."""
     configured = os.environ.get("APILENS_CLI")
     if configured:
         return shlex.split(configured)
     found = shutil.which("apilens")
     if found:
         return [found]
+    npx = shutil.which("npx")
+    if npx:
+        return [npx, "--yes", f"@apilens/cli@{__version__}"]
     raise ApiLensError(
-        "ApiLens CLI not found. Install it (`npm install -g @apilens/cli`) or set APILENS_CLI, "
+        "ApiLens CLI not found. Install Node.js 22.13+ (the CLI then runs through npx), "
+        "`npm install -g @apilens/cli`, or set APILENS_CLI, "
         'e.g. APILENS_CLI="node /path/to/api-lens/packages/cli/dist/bin.js".'
     )
 

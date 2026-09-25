@@ -1,12 +1,45 @@
 {
   "name": "@apilens/cli",
   "version": "0.1.0",
+  "description": "ApiLens CLI: find frontend code broken by backend API changes, check frontend code against the real API",
+  "keywords": [
+    "apilens",
+    "api",
+    "breaking-changes",
+    "spring-boot",
+    "typescript",
+    "ci",
+    "cli"
+  ],
+  "license": "Apache-2.0",
+  "author": "Heonjin Jeong",
+  "homepage": "https://github.com/heonjinjeong/api-lens#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heonjinjeong/api-lens.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/heonjinjeong/api-lens/issues"
+  },
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
     "apilens": "./dist/bin.js"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "!**/*.tsbuildinfo"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsc -b tsconfig.json"
   },

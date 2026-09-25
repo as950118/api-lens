@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_JAR_PATH } from "@apilens/extractor-java";
 import type { AiProvider, AiVerificationRequest } from "@apilens/core";
+import { runCi } from "../src/ci.js";
 import { ApiLensWorkspace } from "../src/workspace.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -127,6 +128,21 @@ describe.skipIf(!hasJar)("with the backend contract", () => {
 
     const getUsers = report.endpoints.find((e) => e.endpointId === "GET /users")!;
     expect(getUsers.result).toBe("FAIL");
+  });
+
+  it("runs the CI flow without git: first run stores the baseline, next run compares against it", async () => {
+    const ciWs = new ApiLensWorkspace(join(dir, "ci-baseline.db"), join(fixtures, "apilens.config.json"));
+    const out = join(dir, "ci-baseline");
+    const first = await runCi(ciWs, { frontendDir: join(fixtures, "frontend"), backendDir: join(fixtures, "backend"), outDir: out, checkFailOn: "never" });
+    expect(first.changes).toBeNull();
+    expect(first.changesSkipped).toContain("No git base ref");
+    expect(first.exitCode).toBe(0);
+
+    const second = await runCi(ciWs, { frontendDir: join(fixtures, "frontend"), backendDir: join(fixtures, "backend-v2"), outDir: out, checkFailOn: "never" });
+    expect(second.changes?.result).toBe("FAIL");
+    expect(second.exitCode).toBe(1);
+    expect(readFileSync(second.files.report, "utf8")).toContain("ApiLens: backend API change report: FAIL");
+    expect(JSON.parse(readFileSync(second.files.json, "utf8")).exitCode).toBe(1);
   });
 
   it("answers impact questions from the index", () => {

@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Command, Option } from "commander";
 import {
@@ -27,7 +27,10 @@ import {
 } from "./format.js";
 import type { Effort } from "@apilens/ai-anthropic";
 import { AI_PROVIDERS, createAiProvider } from "./ai.js";
+import { runCi, type CheckFailOn, type VerifyFailOn } from "./ci.js";
 import { ApiLensWorkspace, DEFAULT_INDEX_PATH } from "./workspace.js";
+
+const VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 
 type Format = "text" | "json" | "mermaid" | "html" | "markdown";
 type ImpactFailOn = "definite" | "likely" | "possible" | "never";
@@ -45,7 +48,7 @@ export function buildProgram(): Command {
   program
     .name("apilens")
     .description("Find the frontend code affected by backend API changes, and check frontend code against the real API")
-    .version("0.1.0")
+    .version(VERSION)
     .option("-i, --index <path>", "index database", DEFAULT_INDEX_PATH)
     .option("-c, --config <path>", "apilens.config.json (defaults to <frontendDir>/apilens.config.json at index time)");
 
@@ -223,6 +226,43 @@ export function buildProgram(): Command {
         opts.out,
       );
       setImpactExitCode(report, opts.failOn);
+    });
+
+  program
+    .command("ci")
+    .description("Full pull-request check: index frontend, backend API change impact, contract check of changed files")
+    .requiredOption("--frontend <dir>", "frontend project root")
+    .requiredOption("--backend <dir>", "backend project root")
+    .option("--base <ref>", "git ref to compare against (without it, the stored backend contract is the baseline)")
+    .option("--out <dir>", "report directory", ".apilens")
+    .option("--ai-provider <name>", "verify undecided findings with AI (e.g. anthropic)", process.env.APILENS_AI_PROVIDER)
+    .option("--ai-model <model>", "model id for AI verification", process.env.APILENS_AI_MODEL)
+    .addOption(impactFailOn())
+    .addOption(new Option("--check-fail-on <level>", "contract check failure level").choices(["error", "warning", "never"]).default("error"))
+    .addOption(new Option("--verify-fail-on <level>", "with --ai-provider: verified result failure level").choices(["fail", "warning", "never"]).default("fail"))
+    .option("--jar <path>", "Java extractor JAR (defaults to the bundled one)")
+    .action(async (opts: {
+      frontend: string; backend: string; base?: string; out: string; aiProvider?: string; aiModel?: string;
+      failOn: ImpactFailOn; checkFailOn: CheckFailOn; verifyFailOn: VerifyFailOn; jar?: string;
+    }) => {
+      const aiProvider = opts.aiProvider && opts.aiProvider !== "none"
+        ? createAiProvider(opts.aiProvider, { model: opts.aiModel })
+        : undefined;
+      const result = await runCi(workspace(), {
+        frontendDir: opts.frontend,
+        backendDir: opts.backend,
+        base: opts.base,
+        outDir: opts.out,
+        aiProvider,
+        failOn: opts.failOn,
+        checkFailOn: opts.checkFailOn,
+        verifyFailOn: opts.verifyFailOn,
+        jarPath: opts.jar,
+      });
+      if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, readFileSync(result.files.report, "utf8"));
+      const changes = result.changes ? `backend changes ${result.changes.result}` : "backend changes skipped";
+      console.log(`ApiLens: ${changes}, contract check ${result.contract.result} -> ${result.files.report}`);
+      process.exitCode = result.exitCode;
     });
 
   program

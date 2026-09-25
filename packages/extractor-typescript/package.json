@@ -1,11 +1,43 @@
 {
   "name": "@apilens/extractor-typescript",
   "version": "0.1.0",
+  "description": "ApiLens TypeScript frontend extractor (ts-morph): API calls and response field reads",
+  "keywords": [
+    "apilens",
+    "typescript",
+    "ts-morph",
+    "static-analysis",
+    "axios",
+    "react"
+  ],
+  "license": "Apache-2.0",
+  "author": "Heonjin Jeong",
+  "homepage": "https://github.com/heonjinjeong/api-lens#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heonjinjeong/api-lens.git",
+    "directory": "packages/extractor-typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/heonjinjeong/api-lens/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "!**/*.tsbuildinfo"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "tsc -b tsconfig.json"
