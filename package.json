@@ -1,9 +1,9 @@
 {
-  "name": "apilens-monorepo",
+  "name": "tacet",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "ApiLens - detect frontend regressions caused by backend API changes",
+  "description": "Tacet - detect frontend regressions caused by backend API changes",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -12,10 +12,10 @@
   ],
   "scripts": {
     "build": "tsc -b packages/cli packages/mcp",
-    "build:jar": "npm run build:jar -w @apilens/extractor-java",
+    "build:jar": "npm run build:jar -w @tacet/extractor-java",
     "clean": "tsc -b packages/cli packages/mcp --clean",
     "test": "vitest run",
-    "test:jvm": "npm run test:jvm -w @apilens/extractor-java",
+    "test:jvm": "npm run test:jvm -w @tacet/extractor-java",
     "pack:all": "node scripts/pack-all.mjs"
   },
   "devDependencies": {

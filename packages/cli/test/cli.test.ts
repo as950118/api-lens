@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DEFAULT_JAR_PATH } from "@apilens/extractor-java";
-import type { AiProvider, AiVerificationRequest } from "@apilens/core";
+import { DEFAULT_JAR_PATH } from "@tacet/extractor-java";
+import type { AiProvider, AiVerificationRequest } from "@tacet/core";
 import { runCi } from "../src/ci.js";
-import { ApiLensWorkspace } from "../src/workspace.js";
+import { TacetWorkspace } from "../src/workspace.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const fixtures = join(repoRoot, "test/fixtures");
@@ -16,7 +16,7 @@ const hasJar = existsSync(DEFAULT_JAR_PATH);
 
 let dir: string;
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "apilens-cli-"));
+  dir = mkdtempSync(join(tmpdir(), "tacet-cli-"));
 });
 afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
@@ -25,15 +25,15 @@ afterAll(() => {
 function copyFrontend(name: string): string {
   const target = join(dir, name);
   cpSync(join(fixtures, "frontend"), target, { recursive: true });
-  cpSync(join(fixtures, "apilens.config.json"), join(target, "apilens.config.json"));
+  cpSync(join(fixtures, "tacet.config.json"), join(target, "tacet.config.json"));
   return target;
 }
 
-describe("ApiLensWorkspace.indexFrontend", () => {
+describe("TacetWorkspace.indexFrontend", () => {
   it("builds the index and reports every file on the first run", async () => {
-    const ws = new ApiLensWorkspace(join(dir, "full.db"));
+    const ws = new TacetWorkspace(join(dir, "full.db"));
     const result = await ws.indexFrontend(join(fixtures, "frontend"), {
-      configPath: join(fixtures, "apilens.config.json"),
+      configPath: join(fixtures, "tacet.config.json"),
     });
     expect(result.summary).toMatchObject({ files: 9, apiCalls: 15, resolvedApiCalls: 15 });
     expect(result.changedFiles).toHaveLength(9);
@@ -42,7 +42,7 @@ describe("ApiLensWorkspace.indexFrontend", () => {
 
   it("rewrites only the changed file and lists the APIs it uses", async () => {
     const frontend = copyFrontend("incremental");
-    const ws = new ApiLensWorkspace(join(dir, "incremental.db"));
+    const ws = new TacetWorkspace(join(dir, "incremental.db"));
     await ws.indexFrontend(frontend);
 
     const card = join(frontend, "src/components/UserCard.tsx");
@@ -54,22 +54,22 @@ describe("ApiLensWorkspace.indexFrontend", () => {
   });
 
   it("rejects a missing frontend directory", async () => {
-    await expect(new ApiLensWorkspace(join(dir, "x.db")).indexFrontend(join(dir, "missing"))).rejects.toThrow(
+    await expect(new TacetWorkspace(join(dir, "x.db")).indexFrontend(join(dir, "missing"))).rejects.toThrow(
       "Frontend directory not found",
     );
   });
 
   it("explains how to recover when the index is empty", () => {
-    expect(() => new ApiLensWorkspace(join(dir, "empty.db")).model()).toThrow("Run `apilens index");
+    expect(() => new TacetWorkspace(join(dir, "empty.db")).model()).toThrow("Run `tacet index");
   });
 });
 
 describe.skipIf(!hasJar)("with the backend contract", () => {
-  let ws: ApiLensWorkspace;
+  let ws: TacetWorkspace;
 
   beforeAll(async () => {
-    ws = new ApiLensWorkspace(join(dir, "contract.db"));
-    await ws.indexFrontend(join(fixtures, "frontend"), { configPath: join(fixtures, "apilens.config.json") });
+    ws = new TacetWorkspace(join(dir, "contract.db"));
+    await ws.indexFrontend(join(fixtures, "frontend"), { configPath: join(fixtures, "tacet.config.json") });
     await ws.extractBackend(join(fixtures, "backend"));
   });
 
@@ -131,7 +131,7 @@ describe.skipIf(!hasJar)("with the backend contract", () => {
   });
 
   it("runs the CI flow without git: first run stores the baseline, next run compares against it", async () => {
-    const ciWs = new ApiLensWorkspace(join(dir, "ci-baseline.db"), join(fixtures, "apilens.config.json"));
+    const ciWs = new TacetWorkspace(join(dir, "ci-baseline.db"), join(fixtures, "tacet.config.json"));
     const out = join(dir, "ci-baseline");
     const first = await runCi(ciWs, { frontendDir: join(fixtures, "frontend"), backendDir: join(fixtures, "backend"), outDir: out, checkFailOn: "never" });
     expect(first.changes).toBeNull();
@@ -141,7 +141,7 @@ describe.skipIf(!hasJar)("with the backend contract", () => {
     const second = await runCi(ciWs, { frontendDir: join(fixtures, "frontend"), backendDir: join(fixtures, "backend-v2"), outDir: out, checkFailOn: "never" });
     expect(second.changes?.result).toBe("FAIL");
     expect(second.exitCode).toBe(1);
-    expect(readFileSync(second.files.report, "utf8")).toContain("ApiLens: backend API change report: FAIL");
+    expect(readFileSync(second.files.report, "utf8")).toContain("Tacet: backend API change report: FAIL");
     expect(JSON.parse(readFileSync(second.files.json, "utf8")).exitCode).toBe(1);
   });
 
@@ -162,19 +162,19 @@ describe.skipIf(!hasJar)("with the backend contract", () => {
   });
 });
 
-describe.skipIf(!hasJar || !existsSync(bin))("apilens CLI", () => {
+describe.skipIf(!hasJar || !existsSync(bin))("tacet CLI", () => {
   const run = (...args: string[]) =>
     spawnSync(process.execPath, [bin, "-i", join(dir, "cli.db"), ...args], { encoding: "utf8" });
 
   beforeAll(() => {
-    expect(run("index", join(fixtures, "frontend"), "-c", join(fixtures, "apilens.config.json")).status).toBe(0);
+    expect(run("index", join(fixtures, "frontend"), "-c", join(fixtures, "tacet.config.json")).status).toBe(0);
     expect(run("extract-backend", join(fixtures, "backend")).status).toBe(0);
   });
 
   it("exits 1 when the contract check fails and 0 with --fail-on never", () => {
     const failing = run("check");
     expect(failing.status).toBe(1);
-    expect(failing.stdout).toContain("ApiLens contract check: FAIL");
+    expect(failing.stdout).toContain("Tacet contract check: FAIL");
     expect(failing.stdout).toContain("Did you mean `name`?");
     expect(run("check", "--fail-on", "never").status).toBe(0);
   });
@@ -189,13 +189,13 @@ describe.skipIf(!hasJar || !existsSync(bin))("apilens CLI", () => {
     expect(run("impact", "--field", "UserResponse.name", "-f", "mermaid").stdout).toMatch(/^flowchart LR/);
     const html = join(dir, "graph.html");
     expect(run("graph", "-o", html).status).toBe(0);
-    expect(readFileSync(html, "utf8")).toContain("<title>ApiLens impact graph</title>");
+    expect(readFileSync(html, "utf8")).toContain("<title>Tacet impact graph</title>");
   });
 
   it("reports frontend impact of backend changes and fails on definite impact", () => {
     const text = run("analyze", "--backend", join(fixtures, "backend-v2"));
     expect(text.status).toBe(1);
-    expect(text.stdout).toContain("ApiLens API change report: FAIL");
+    expect(text.stdout).toContain("Tacet API change report: FAIL");
     expect(text.stdout).toContain("PUT /users/{id}  [moved → PUT /users/{id}/profile]");
     const report = JSON.parse(run("analyze", "--backend", join(fixtures, "backend-v2"), "-f", "json", "--fail-on", "never").stdout);
     expect(report.counts).toMatchObject({ changedApis: 8, DEFINITE: 9, LIKELY: 2, POSSIBLE: 4 });
@@ -206,7 +206,7 @@ describe.skipIf(!hasJar || !existsSync(bin))("apilens CLI", () => {
   it("diffs the backend between git refs", () => {
     const repo = join(dir, "diff-repo");
     cpSync(join(fixtures, "frontend"), join(repo, "frontend"), { recursive: true });
-    cpSync(join(fixtures, "apilens.config.json"), join(repo, "frontend/apilens.config.json"));
+    cpSync(join(fixtures, "tacet.config.json"), join(repo, "frontend/tacet.config.json"));
     cpSync(join(fixtures, "backend"), join(repo, "backend"), { recursive: true });
     const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" });
     const commit = (message: string) => {
@@ -225,7 +225,7 @@ describe.skipIf(!hasJar || !existsSync(bin))("apilens CLI", () => {
 
     const md = cli("diff", "--base", "HEAD~1", "--head", "HEAD", "--backend", join(repo, "backend"), "-f", "markdown");
     expect(md.status).toBe(1);
-    expect(md.stdout).toContain("## ApiLens: backend API changes HEAD~1...HEAD: FAIL");
+    expect(md.stdout).toContain("## Tacet: backend API changes HEAD~1...HEAD: FAIL");
     expect(md.stdout).toContain("| DEFINITE | `src/components/UserCard.tsx:4` UserCard | `user.name` |");
 
     const unchanged = cli("diff", "--base", "HEAD", "--backend", join(repo, "backend"));
@@ -236,15 +236,15 @@ describe.skipIf(!hasJar || !existsSync(bin))("apilens CLI", () => {
   it("runs the CI script: backend impact + changed-frontend contract check", () => {
     const repo = join(dir, "ci-repo");
     cpSync(join(fixtures, "frontend"), join(repo, "frontend"), { recursive: true });
-    cpSync(join(fixtures, "apilens.config.json"), join(repo, "frontend/apilens.config.json"));
+    cpSync(join(fixtures, "tacet.config.json"), join(repo, "frontend/tacet.config.json"));
     cpSync(join(fixtures, "backend"), join(repo, "backend"), { recursive: true });
     const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" });
     git("init", "-q");
     git("add", "-A");
     git("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "base");
 
-    const script = join(repoRoot, "scripts/apilens-ci.sh");
-    const env = { ...process.env, APILENS_FRONTEND: "frontend", APILENS_BACKEND: "backend", APILENS_BASE: "HEAD", APILENS_OUT: join(repo, ".out") };
+    const script = join(repoRoot, "scripts/tacet-ci.sh");
+    const env = { ...process.env, TACET_FRONTEND: "frontend", TACET_BACKEND: "backend", TACET_BASE: "HEAD", TACET_OUT: join(repo, ".out") };
     const clean = spawnSync("bash", [script], { cwd: repo, env, encoding: "utf8" });
     expect(clean.status).toBe(0);
     expect(readFileSync(join(repo, ".out/report.md"), "utf8")).toContain("frontend contract check: PASS");

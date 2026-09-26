@@ -1,14 +1,14 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SubprocessExtractor, type BackendManifest, type LanguageExtractor } from "@apilens/core";
+import { SubprocessExtractor, type BackendManifest, type LanguageExtractor } from "@tacet/core";
 
 export const DEFAULT_JAR_PATH = fileURLToPath(
-  new URL("../jvm/build/libs/apilens-java-extractor.jar", import.meta.url),
+  new URL("../jvm/build/libs/tacet-java-extractor.jar", import.meta.url),
 );
 
 export interface JavaExtractorOptions {
-  /** Defaults to $APILENS_JAVA_EXTRACTOR_JAR, then the JAR built inside this package. */
+  /** Defaults to $TACET_JAVA_EXTRACTOR_JAR, then the JAR built inside this package. */
   jarPath?: string;
   /** Defaults to $JAVA_HOME/bin/java, then `java` on PATH. */
   javaCommand?: string;
@@ -21,7 +21,7 @@ export class JavaExtractor implements LanguageExtractor<BackendManifest> {
   private readonly javaCommand: string;
 
   constructor(options: JavaExtractorOptions = {}) {
-    this.jarPath = resolve(options.jarPath ?? process.env.APILENS_JAVA_EXTRACTOR_JAR ?? DEFAULT_JAR_PATH);
+    this.jarPath = resolve(options.jarPath ?? process.env.TACET_JAVA_EXTRACTOR_JAR ?? DEFAULT_JAR_PATH);
     this.javaCommand =
       options.javaCommand ??
       (process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin", "java") : "java");
@@ -31,7 +31,7 @@ export class JavaExtractor implements LanguageExtractor<BackendManifest> {
     if (!existsSync(this.jarPath)) {
       throw new Error(
         `Java extractor JAR not found at ${this.jarPath}. ` +
-          `Build it with "npm run build:jar -w @apilens/extractor-java" or set APILENS_JAVA_EXTRACTOR_JAR.`,
+          `Build it with "npm run build:jar -w @tacet/extractor-java" or set TACET_JAVA_EXTRACTOR_JAR.`,
       );
     }
     return new SubprocessExtractor<BackendManifest>({

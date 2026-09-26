@@ -1,7 +1,7 @@
 node_modules/
 dist/
 *.tsbuildinfo
-.apilens/
+.tacet/
 *.db
 *.db-journal
 coverage/

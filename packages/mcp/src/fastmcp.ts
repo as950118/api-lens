@@ -1,7 +1,7 @@
 import type { z } from "zod";
-import { createApiLensTools, type ApiLensToolOptions } from "./tools.js";
+import { createTacetTools, type TacetToolOptions } from "./tools.js";
 
-/** The subset of a fastmcp tool ApiLens provides; fastmcp accepts any Standard Schema (zod) for `parameters`. */
+/** The subset of a fastmcp tool Tacet provides; fastmcp accepts any Standard Schema (zod) for `parameters`. */
 export interface FastMCPToolDefinition {
   name: string;
   description: string;
@@ -15,20 +15,20 @@ export interface FastMCPLike {
   addTool(tool: FastMCPToolDefinition): void;
 }
 
-export interface AddApiLensToolsOptions extends ApiLensToolOptions {
-  /** Prepended to every tool name, e.g. "apilens_" to avoid clashes with the host's own tools. */
+export interface AddTacetToolsOptions extends TacetToolOptions {
+  /** Prepended to every tool name, e.g. "tacet_" to avoid clashes with the host's own tools. */
   prefix?: string;
 }
 
 /**
- * Registers the ApiLens tools on an existing fastmcp server:
+ * Registers the Tacet tools on an existing fastmcp server:
  *
  *   const server = new FastMCP({ name: "my-server", version: "1.0.0" });
- *   addApiLensTools(server, { frontendDir: "./frontend", backendDir: "./backend" });
+ *   addTacetTools(server, { frontendDir: "./frontend", backendDir: "./backend" });
  */
-export function addApiLensTools(server: FastMCPLike, options: AddApiLensToolsOptions = {}): string[] {
+export function addTacetTools(server: FastMCPLike, options: AddTacetToolsOptions = {}): string[] {
   const names: string[] = [];
-  for (const tool of createApiLensTools(options)) {
+  for (const tool of createTacetTools(options)) {
     const name = `${options.prefix ?? ""}${tool.name}`;
     server.addTool({
       name,

@@ -1,9 +1,9 @@
 {
-  "name": "@apilens/cli",
+  "name": "@tacet/cli",
   "version": "0.1.0",
-  "description": "ApiLens CLI: find frontend code broken by backend API changes, check frontend code against the real API",
+  "description": "Tacet CLI: find frontend code broken by backend API changes, check frontend code against the real API",
   "keywords": [
-    "apilens",
+    "tacet",
     "api",
     "breaking-changes",
     "spring-boot",
@@ -13,20 +13,20 @@
   ],
   "license": "Apache-2.0",
   "author": "Heonjin Jeong",
-  "homepage": "https://github.com/heonjinjeong/api-lens#readme",
+  "homepage": "https://github.com/heonjinjeong/tacet#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/heonjinjeong/api-lens.git",
+    "url": "git+https://github.com/heonjinjeong/tacet.git",
     "directory": "packages/cli"
   },
   "bugs": {
-    "url": "https://github.com/heonjinjeong/api-lens/issues"
+    "url": "https://github.com/heonjinjeong/tacet/issues"
   },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "apilens": "./dist/bin.js"
+    "tacet": "./dist/bin.js"
   },
   "files": [
     "dist",
@@ -44,10 +44,10 @@
     "build": "tsc -b tsconfig.json"
   },
   "dependencies": {
-    "@apilens/ai-anthropic": "^0.1.0",
-    "@apilens/core": "^0.1.0",
-    "@apilens/extractor-java": "^0.1.0",
-    "@apilens/extractor-typescript": "^0.1.0",
+    "@tacet/ai-anthropic": "^0.1.0",
+    "@tacet/core": "^0.1.0",
+    "@tacet/extractor-java": "^0.1.0",
+    "@tacet/extractor-typescript": "^0.1.0",
     "commander": "^15.0.0"
   }
 }

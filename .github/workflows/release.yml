@@ -1,4 +1,4 @@
-# Publishes every ApiLens artifact when a version tag (v1.2.3) is pushed.
+# Publishes every Tacet artifact when a version tag (v1.2.3) is pushed.
 # One-time setup and required secrets: see RELEASING.md.
 name: Release
 
@@ -55,7 +55,7 @@ jobs:
         run: |
           for pkg in core extractor-typescript extractor-java ai-anthropic cli mcp; do
             cp LICENSE "packages/$pkg/LICENSE"
-            npm publish -w "@apilens/$pkg"
+            npm publish -w "@tacet/$pkg"
           done
 
   pypi:
@@ -87,7 +87,7 @@ jobs:
           server-id: central
           server-username: MAVEN_CENTRAL_USERNAME
           server-password: MAVEN_CENTRAL_PASSWORD
-      - name: Deploy apilens-maven-plugin
+      - name: Deploy tacet-maven-plugin
         working-directory: plugins/maven
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}

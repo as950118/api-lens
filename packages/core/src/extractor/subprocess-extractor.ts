@@ -11,7 +11,7 @@ export interface SubprocessExtractorConfig {
 
 /**
  * Generic LanguageExtractor implementation for any out-of-process extractor
- * that follows the ApiLens extractor protocol: invoked as
+ * that follows the Tacet extractor protocol: invoked as
  * `<command> <args...> <rootDir>` and prints a single Manifest JSON document
  * to stdout. This is what lets extractors for languages other than
  * TypeScript/JavaScript be written in any language - e.g. the Java extractor

@@ -1,5 +1,5 @@
-import type { AiProvider } from "@apilens/core";
-import { AnthropicProvider, type Effort } from "@apilens/ai-anthropic";
+import type { AiProvider } from "@tacet/core";
+import { AnthropicProvider, type Effort } from "@tacet/ai-anthropic";
 
 export const AI_PROVIDERS = ["anthropic"] as const;
 export type AiProviderName = (typeof AI_PROVIDERS)[number];

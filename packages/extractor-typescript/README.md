@@ -1,5 +1,5 @@
-# @apilens/extractor-typescript
+# @tacet/extractor-typescript
 
-ApiLens TypeScript frontend extractor (ts-morph): API calls and response field reads.
+Tacet TypeScript frontend extractor (ts-morph): API calls and response field reads.
 
-Part of [ApiLens](https://github.com/heonjinjeong/api-lens). Most users want [`@apilens/cli`](https://www.npmjs.com/package/@apilens/cli).
+Part of [Tacet](https://github.com/heonjinjeong/tacet). Most users want [`@tacet/cli`](https://www.npmjs.com/package/@tacet/cli).

@@ -1,15 +1,15 @@
-# apilens (Python)
+# tacet (Python)
 
-Python bindings for [ApiLens](../README.md): check a TypeScript frontend against a Spring Boot API and see what
+Python bindings for [Tacet](../README.md): check a TypeScript frontend against a Spring Boot API and see what
 an API, file or field change would affect, plus ready-made tools for [FastMCP](https://gofastmcp.com).
 
-The package drives the ApiLens CLI (`--format json`), so the machine running it needs Node.js 22.13+
-(and Java 17+ for `extract_backend`). Point it at the CLI with `APILENS_CLI` or put `apilens` on `PATH`.
+The package drives the Tacet CLI (`--format json`), so the machine running it needs Node.js 22.13+
+(and Java 17+ for `extract_backend`). Point it at the CLI with `TACET_CLI` or put `tacet` on `PATH`.
 
 ```python
-from apilens import ApiLens
+from tacet import Tacet
 
-lens = ApiLens(index=".apilens/index.db", frontend_dir="./frontend", backend_dir="./backend")
+lens = Tacet(index=".tacet/index.db", frontend_dir="./frontend", backend_dir="./backend")
 lens.index_frontend()
 lens.extract_backend()
 
@@ -23,10 +23,10 @@ lens.impact_of_field("UserResponse.name")
 
 ```python
 from fastmcp import FastMCP
-from apilens.fastmcp import register_tools
+from tacet.fastmcp import register_tools
 
 mcp = FastMCP("my-server")
-register_tools(mcp, frontend_dir="./frontend", backend_dir="./backend", prefix="apilens_")
+register_tools(mcp, frontend_dir="./frontend", backend_dir="./backend", prefix="tacet_")
 mcp.run()
 ```
 

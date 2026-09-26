@@ -41,13 +41,13 @@ jobs:
         run: mvn -B verify
       - name: Smoke-test the CLI on the fixtures
         run: |
-          node packages/cli/dist/bin.js index test/fixtures/frontend --config test/fixtures/apilens.config.json
+          node packages/cli/dist/bin.js index test/fixtures/frontend --config test/fixtures/tacet.config.json
           node packages/cli/dist/bin.js extract-backend test/fixtures/backend
           # The fixture frontend contains deliberate contract violations.
           node packages/cli/dist/bin.js check --fail-on never
-          node packages/cli/dist/bin.js graph -o .apilens/graph.html
+          node packages/cli/dist/bin.js graph -o .tacet/graph.html
       - uses: actions/upload-artifact@v4
         if: matrix.node == 24
         with:
-          name: apilens-graph
-          path: .apilens/graph.html
+          name: tacet-graph
+          path: .tacet/graph.html

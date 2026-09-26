@@ -1,16 +1,16 @@
-// Adding ApiLens to an existing TypeScript fastmcp server.
+// Adding Tacet to an existing TypeScript fastmcp server.
 import { FastMCP } from "fastmcp";
-import { addApiLensTools } from "@apilens/mcp";
+import { addTacetTools } from "@tacet/mcp";
 
 const server = new FastMCP({ name: "my-dev-tools", version: "1.0.0" });
 
 // ...the server's own tools...
 
-addApiLensTools(server, {
-  indexPath: ".apilens/index.db",
+addTacetTools(server, {
+  indexPath: ".tacet/index.db",
   frontendDir: "./frontend",
   backendDir: "./backend",
-  prefix: "apilens_",
+  prefix: "tacet_",
 });
 
 await server.start({ transportType: "stdio" });

@@ -5,13 +5,13 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>io.github.heonjinjeong</groupId>
-  <artifactId>apilens-maven-plugin</artifactId>
+  <artifactId>tacet-maven-plugin</artifactId>
   <version>0.1.0</version>
   <packaging>maven-plugin</packaging>
 
-  <name>ApiLens Maven Plugin</name>
-  <description>Run ApiLens in Maven builds: find frontend code broken by backend API changes and check frontend API usage</description>
-  <url>https://github.com/heonjinjeong/api-lens</url>
+  <name>Tacet Maven Plugin</name>
+  <description>Run Tacet in Maven builds: find frontend code broken by backend API changes and check frontend API usage</description>
+  <url>https://github.com/heonjinjeong/tacet</url>
   <licenses>
     <license>
       <name>Apache-2.0</name>
@@ -27,9 +27,9 @@
     </developer>
   </developers>
   <scm>
-    <url>https://github.com/heonjinjeong/api-lens</url>
-    <connection>scm:git:https://github.com/heonjinjeong/api-lens.git</connection>
-    <developerConnection>scm:git:ssh://git@github.com/heonjinjeong/api-lens.git</developerConnection>
+    <url>https://github.com/heonjinjeong/tacet</url>
+    <connection>scm:git:https://github.com/heonjinjeong/tacet.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/heonjinjeong/tacet.git</developerConnection>
   </scm>
 
   <prerequisites>
@@ -41,7 +41,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.version>3.9.9</maven.version>
     <plugin.tools.version>3.15.1</plugin.tools.version>
-    <apilens.repo>${project.basedir}/../..</apilens.repo>
+    <tacet.repo>${project.basedir}/../..</tacet.repo>
   </properties>
 
   <dependencies>
@@ -93,7 +93,7 @@
         <artifactId>maven-plugin-plugin</artifactId>
         <version>${plugin.tools.version}</version>
         <configuration>
-          <goalPrefix>apilens</goalPrefix>
+          <goalPrefix>tacet</goalPrefix>
         </configuration>
       </plugin>
       <plugin>
@@ -107,8 +107,8 @@
           <postBuildHookScript>verify</postBuildHookScript>
           <streamLogsOnFailures>true</streamLogsOnFailures>
           <properties>
-            <fixtures>${apilens.repo}/test/fixtures</fixtures>
-            <apilensCli>${apilens.repo}/packages/cli/dist/bin.js</apilensCli>
+            <fixtures>${tacet.repo}/test/fixtures</fixtures>
+            <tacetCli>${tacet.repo}/packages/cli/dist/bin.js</tacetCli>
           </properties>
           <goals><goal>verify</goal></goals>
         </configuration>

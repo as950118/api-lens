@@ -1,6 +1,6 @@
-name: ApiLens
+name: Tacet
 description: Find frontend code affected by backend API changes, and check changed frontend code against the real API
-author: ApiLens
+author: Tacet
 branding:
   icon: eye
   color: blue
@@ -50,7 +50,7 @@ inputs:
 outputs:
   report:
     description: Path of the Markdown report
-    value: ${{ steps.apilens.outputs.report }}
+    value: ${{ steps.tacet.outputs.report }}
 
 runs:
   using: composite
@@ -62,35 +62,35 @@ runs:
       with:
         distribution: temurin
         java-version: ${{ inputs.java-version }}
-    - name: Build ApiLens
+    - name: Build Tacet
       shell: bash
       working-directory: ${{ github.action_path }}
       run: |
         npm ci --no-audit --no-fund
         npm run build:jar
         npm run build
-    - name: Run ApiLens
-      id: apilens
+    - name: Run Tacet
+      id: tacet
       shell: bash
       env:
-        APILENS_FRONTEND: ${{ inputs.frontend }}
-        APILENS_BACKEND: ${{ inputs.backend }}
-        APILENS_BASE: ${{ inputs.base || format('origin/{0}', github.base_ref) }}
-        APILENS_FAIL_ON: ${{ inputs.fail-on }}
-        APILENS_CHECK_FAIL_ON: ${{ inputs.check-fail-on }}
-        APILENS_AI_PROVIDER: ${{ inputs.ai-provider }}
-        APILENS_AI_MODEL: ${{ inputs.ai-model }}
-        APILENS_VERIFY_FAIL_ON: ${{ inputs.verify-fail-on }}
-        APILENS_OUT: ${{ runner.temp }}/apilens
+        TACET_FRONTEND: ${{ inputs.frontend }}
+        TACET_BACKEND: ${{ inputs.backend }}
+        TACET_BASE: ${{ inputs.base || format('origin/{0}', github.base_ref) }}
+        TACET_FAIL_ON: ${{ inputs.fail-on }}
+        TACET_CHECK_FAIL_ON: ${{ inputs.check-fail-on }}
+        TACET_AI_PROVIDER: ${{ inputs.ai-provider }}
+        TACET_AI_MODEL: ${{ inputs.ai-model }}
+        TACET_VERIFY_FAIL_ON: ${{ inputs.verify-fail-on }}
+        TACET_OUT: ${{ runner.temp }}/tacet
       run: |
-        echo "report=$APILENS_OUT/report.md" >> "$GITHUB_OUTPUT"
-        "${{ github.action_path }}/scripts/apilens-ci.sh"
+        echo "report=$TACET_OUT/report.md" >> "$GITHUB_OUTPUT"
+        "${{ github.action_path }}/scripts/tacet-ci.sh"
     - name: Comment on the pull request
-      if: always() && inputs.comment == 'true' && github.event_name == 'pull_request' && steps.apilens.outputs.report != ''
+      if: always() && inputs.comment == 'true' && github.event_name == 'pull_request' && steps.tacet.outputs.report != ''
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        REPORT: ${{ steps.apilens.outputs.report }}
+        REPORT: ${{ steps.tacet.outputs.report }}
       run: |
         [ -f "$REPORT" ] || exit 0
         gh pr comment "${{ github.event.pull_request.number }}" --body-file "$REPORT" --edit-last --create-if-none

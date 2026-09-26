@@ -1,4 +1,4 @@
-import type { ApilensConfig } from "../config.js";
+import type { TacetConfig } from "../config.js";
 import type {
   ApiCallInfo,
   BackendManifest,
@@ -28,7 +28,7 @@ export class ProjectModel {
   constructor(
     readonly frontend: FrontendManifest,
     readonly backend: BackendManifest | null,
-    readonly config: ApilensConfig = {},
+    readonly config: TacetConfig = {},
   ) {
     for (const call of frontend.apiCalls) this.apiCalls.set(call.id, call);
     for (const fn of frontend.functions) this.functions.set(fn.id, fn);

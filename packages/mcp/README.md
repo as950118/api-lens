@@ -1,6 +1,6 @@
-# @apilens/mcp
+# @tacet/mcp
 
-[ApiLens](https://github.com/heonjinjeong/api-lens) as MCP tools: check a TypeScript frontend against a Spring Boot API,
+[Tacet](https://github.com/heonjinjeong/tacet) as MCP tools: check a TypeScript frontend against a Spring Boot API,
 and see what an API, file or field change would affect.
 
 **Standalone stdio server**
@@ -8,9 +8,9 @@ and see what an API, file or field change would affect.
 ```json
 {
   "mcpServers": {
-    "apilens": {
+    "tacet": {
       "command": "npx",
-      "args": ["-y", "@apilens/mcp", "--index", "/abs/project/.apilens/index.db",
+      "args": ["-y", "@tacet/mcp", "--index", "/abs/project/.tacet/index.db",
                "--frontend", "/abs/project/frontend", "--backend", "/abs/project/backend"]
     }
   }
@@ -21,10 +21,10 @@ and see what an API, file or field change would affect.
 
 ```ts
 import { FastMCP } from "fastmcp";
-import { addApiLensTools } from "@apilens/mcp";
+import { addTacetTools } from "@tacet/mcp";
 
 const server = new FastMCP({ name: "my-tools", version: "1.0.0" });
-addApiLensTools(server, { frontendDir: "./frontend", backendDir: "./backend", prefix: "apilens_" });
+addTacetTools(server, { frontendDir: "./frontend", backendDir: "./backend", prefix: "tacet_" });
 ```
 
-Other frameworks: `createApiLensTools()` returns framework-neutral definitions (zod schema + JSON handler).
+Other frameworks: `createTacetTools()` returns framework-neutral definitions (zod schema + JSON handler).

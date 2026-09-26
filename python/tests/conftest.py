@@ -7,7 +7,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 FIXTURES = REPO / "test" / "fixtures"
 CLI = REPO / "packages" / "cli" / "dist" / "bin.js"
-JAR = REPO / "packages" / "extractor-java" / "jvm" / "build" / "libs" / "apilens-java-extractor.jar"
+JAR = REPO / "packages" / "extractor-java" / "jvm" / "build" / "libs" / "tacet-java-extractor.jar"
 
 requires_cli = pytest.mark.skipif(not CLI.exists(), reason="build the CLI first: npm run build")
 requires_backend = pytest.mark.skipif(
@@ -17,7 +17,7 @@ requires_backend = pytest.mark.skipif(
 
 @pytest.fixture(autouse=True)
 def cli_env(monkeypatch):
-    monkeypatch.setenv("APILENS_CLI", f'"{shutil.which("node") or "node"}" "{CLI}"')
+    monkeypatch.setenv("TACET_CLI", f'"{shutil.which("node") or "node"}" "{CLI}"')
 
 
 @pytest.fixture
@@ -26,5 +26,5 @@ def lens_options(tmp_path):
         "index": tmp_path / "index.db",
         "frontend_dir": FIXTURES / "frontend",
         "backend_dir": FIXTURES / "backend",
-        "config": FIXTURES / "apilens.config.json",
+        "config": FIXTURES / "tacet.config.json",
     }

@@ -1,5 +1,5 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import type { ApilensConfig } from "../config.js";
+import type { TacetConfig } from "../config.js";
 import type {
   ApiCallInfo,
   BackendManifest,
@@ -71,12 +71,12 @@ export class IndexStore {
   }
 
   /** The config used when the frontend was indexed, so later queries link endpoints the same way. */
-  writeConfig(config: ApilensConfig): void {
+  writeConfig(config: TacetConfig): void {
     this.setMeta("config", JSON.stringify(config));
   }
 
-  readConfig(): ApilensConfig {
-    return JSON.parse(this.getMeta("config") ?? "{}") as ApilensConfig;
+  readConfig(): TacetConfig {
+    return JSON.parse(this.getMeta("config") ?? "{}") as TacetConfig;
   }
 
   private setMeta(key: string, value: string): void {

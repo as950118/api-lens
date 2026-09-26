@@ -2,7 +2,7 @@ plugins {
     java
 }
 
-group = "dev.apilens"
+group = "dev.tacet"
 version = "0.1.0"
 
 repositories {
@@ -25,8 +25,8 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 tasks.jar {
-    archiveFileName = "apilens-java-extractor.jar"
-    manifest { attributes["Main-Class"] = "dev.apilens.java.Main" }
+    archiveFileName = "tacet-java-extractor.jar"
+    manifest { attributes["Main-Class"] = "dev.tacet.java.Main" }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "**/module-info.class")
@@ -34,5 +34,5 @@ tasks.jar {
 
 tasks.test {
     useJUnitPlatform()
-    systemProperty("apilens.fixtures", rootDir.resolve("../../../test/fixtures").canonicalPath)
+    systemProperty("tacet.fixtures", rootDir.resolve("../../../test/fixtures").canonicalPath)
 }

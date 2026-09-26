@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
-import type { AiVerificationRequest } from "@apilens/core";
+import type { AiVerificationRequest } from "@tacet/core";
 import { AiVerificationError, AnthropicProvider, DEFAULT_ANTHROPIC_MODEL } from "../src/index.js";
 
 const REQUEST: AiVerificationRequest = {
@@ -43,7 +43,7 @@ describe("AnthropicProvider", () => {
     expect(result).toEqual({ model: "claude-opus-5", verdicts: VERDICTS.verdicts });
     const params = calls[0];
     expect(params).toMatchObject({
-      model: process.env.APILENS_AI_MODEL ?? DEFAULT_ANTHROPIC_MODEL,
+      model: process.env.TACET_AI_MODEL ?? DEFAULT_ANTHROPIC_MODEL,
       max_tokens: 16000,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",

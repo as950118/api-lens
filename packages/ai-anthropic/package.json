@@ -1,23 +1,23 @@
 {
-  "name": "@apilens/ai-anthropic",
+  "name": "@tacet/ai-anthropic",
   "version": "0.1.0",
-  "description": "Claude provider for ApiLens AI verification",
+  "description": "Claude provider for Tacet AI verification",
   "keywords": [
-    "apilens",
+    "tacet",
     "anthropic",
     "claude",
     "ai"
   ],
   "license": "Apache-2.0",
   "author": "Heonjin Jeong",
-  "homepage": "https://github.com/heonjinjeong/api-lens#readme",
+  "homepage": "https://github.com/heonjinjeong/tacet#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/heonjinjeong/api-lens.git",
+    "url": "git+https://github.com/heonjinjeong/tacet.git",
     "directory": "packages/ai-anthropic"
   },
   "bugs": {
-    "url": "https://github.com/heonjinjeong/api-lens/issues"
+    "url": "https://github.com/heonjinjeong/tacet/issues"
   },
   "type": "module",
   "main": "./dist/index.js",
@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
-    "@apilens/core": "^0.1.0",
+    "@tacet/core": "^0.1.0",
     "zod": "^4.1.13"
   }
 }

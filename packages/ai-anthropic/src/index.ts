@@ -6,14 +6,14 @@ import {
   type AiProvider,
   type AiVerificationRequest,
   type AiVerificationResponse,
-} from "@apilens/core";
+} from "@tacet/core";
 
 export const DEFAULT_ANTHROPIC_MODEL = "claude-opus-5";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface AnthropicProviderOptions {
-  /** Defaults to $APILENS_AI_MODEL, then claude-opus-5. */
+  /** Defaults to $TACET_AI_MODEL, then claude-opus-5. */
   model?: string;
   /** Thinking depth / token spend. Omitted = the API default (high). */
   effort?: Effort;
@@ -36,7 +36,7 @@ const VerdictsSchema = z.object({
 export class AiVerificationError extends Error {}
 
 /**
- * Claude as the ApiLens verification layer. Uses structured outputs so the
+ * Claude as the Tacet verification layer. Uses structured outputs so the
  * verdicts always match the schema, and server-side refusal fallbacks so a
  * declined request is retried on a fallback model inside the same call.
  */
@@ -47,7 +47,7 @@ export class AnthropicProvider implements AiProvider {
   private readonly effort?: Effort;
 
   constructor(options: AnthropicProviderOptions = {}) {
-    this.model = options.model ?? process.env.APILENS_AI_MODEL ?? DEFAULT_ANTHROPIC_MODEL;
+    this.model = options.model ?? process.env.TACET_AI_MODEL ?? DEFAULT_ANTHROPIC_MODEL;
     this.effort = options.effort;
     // Credentials resolve from ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or an `ant auth login` profile.
     this.client = options.client ?? new Anthropic();

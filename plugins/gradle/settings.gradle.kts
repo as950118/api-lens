@@ -1,1 +1,1 @@
-rootProject.name = "apilens-gradle-plugin"
+rootProject.name = "tacet-gradle-plugin"

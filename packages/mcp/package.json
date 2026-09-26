@@ -1,23 +1,23 @@
 {
-  "name": "@apilens/mcp",
+  "name": "@tacet/mcp",
   "version": "0.1.0",
-  "description": "ApiLens MCP server and fastmcp tools",
+  "description": "Tacet MCP server and fastmcp tools",
   "keywords": [
-    "apilens",
+    "tacet",
     "mcp",
     "fastmcp",
     "model-context-protocol"
   ],
   "license": "Apache-2.0",
   "author": "Heonjin Jeong",
-  "homepage": "https://github.com/heonjinjeong/api-lens#readme",
+  "homepage": "https://github.com/heonjinjeong/tacet#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/heonjinjeong/api-lens.git",
+    "url": "git+https://github.com/heonjinjeong/tacet.git",
     "directory": "packages/mcp"
   },
   "bugs": {
-    "url": "https://github.com/heonjinjeong/api-lens/issues"
+    "url": "https://github.com/heonjinjeong/tacet/issues"
   },
   "type": "module",
   "main": "./dist/index.js",
@@ -26,7 +26,7 @@
     ".": "./dist/index.js"
   },
   "bin": {
-    "apilens-mcp": "./dist/bin.js"
+    "tacet-mcp": "./dist/bin.js"
   },
   "files": [
     "dist",
@@ -44,8 +44,8 @@
     "build": "tsc -b tsconfig.json"
   },
   "dependencies": {
-    "@apilens/cli": "^0.1.0",
-    "@apilens/core": "^0.1.0",
+    "@tacet/cli": "^0.1.0",
+    "@tacet/core": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.30.1",
     "zod": "^4.1.13"
   },

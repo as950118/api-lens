@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createApiLensMcpServer } from "./server.js";
+import { createTacetMcpServer } from "./server.js";
 
 const { values } = parseArgs({
   options: {
@@ -16,16 +16,16 @@ const { values } = parseArgs({
 if (values.help) {
   // stderr: stdout is reserved for the MCP protocol.
   console.error(
-    "Usage: apilens-mcp [--index .apilens/index.db] [--config apilens.config.json] [--frontend dir] [--backend dir]\n" +
-      "Env fallbacks: APILENS_INDEX, APILENS_CONFIG, APILENS_FRONTEND, APILENS_BACKEND",
+    "Usage: tacet-mcp [--index .tacet/index.db] [--config tacet.config.json] [--frontend dir] [--backend dir]\n" +
+      "Env fallbacks: TACET_INDEX, TACET_CONFIG, TACET_FRONTEND, TACET_BACKEND",
   );
   process.exit(0);
 }
 
-const server = createApiLensMcpServer({
-  indexPath: values.index ?? process.env.APILENS_INDEX,
-  configPath: values.config ?? process.env.APILENS_CONFIG,
-  frontendDir: values.frontend ?? process.env.APILENS_FRONTEND,
-  backendDir: values.backend ?? process.env.APILENS_BACKEND,
+const server = createTacetMcpServer({
+  indexPath: values.index ?? process.env.TACET_INDEX,
+  configPath: values.config ?? process.env.TACET_CONFIG,
+  frontendDir: values.frontend ?? process.env.TACET_FRONTEND,
+  backendDir: values.backend ?? process.env.TACET_BACKEND,
 });
 await server.connect(new StdioServerTransport());

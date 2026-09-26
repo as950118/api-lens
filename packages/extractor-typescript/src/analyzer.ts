@@ -2,11 +2,11 @@ import { Node, SyntaxKind, ts, type CallExpression, type SourceFile } from "ts-m
 import {
   normalizePath,
   type ApiCallResolution,
-  type ApilensConfig,
+  type TacetConfig,
   type DataFlowKind,
   type HttpMethod,
   type RequestShape,
-} from "@apilens/core";
+} from "@tacet/core";
 import { objectLiteralKeys, resolveEndpointExpression, resolveUrlQueryKeys } from "./endpoint.js";
 
 /**
@@ -88,7 +88,7 @@ type SymbolKey = ts.Symbol;
 /**
  * Tracks where API response values flow. Values are keyed by TypeScript
  * symbols (not names), so shadowing and cross-file imports resolve
- * correctly. Evaluation is deterministic: anything ApiLens cannot follow is
+ * correctly. Evaluation is deterministic: anything Tacet cannot follow is
  * either dropped or marked `derived`, never guessed.
  */
 export class DataFlowAnalyzer {
@@ -101,7 +101,7 @@ export class DataFlowAnalyzer {
   private readonly destructuredAccesses = new Map<Node, RecordedAccess>();
 
   constructor(
-    private readonly config: ApilensConfig,
+    private readonly config: TacetConfig,
     private readonly callIdOf: (call: CallExpression) => string,
   ) {}
 

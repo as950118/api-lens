@@ -1,5 +1,5 @@
 export { buildProgram } from "./program.js";
-export { ApiLensWorkspace, DEFAULT_INDEX_PATH } from "./workspace.js";
+export { TacetWorkspace, DEFAULT_INDEX_PATH } from "./workspace.js";
 export type {
   AnalyzeBackendOptions,
   CheckOptions,

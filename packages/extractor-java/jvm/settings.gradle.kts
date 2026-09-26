@@ -1,1 +1,1 @@
-rootProject.name = "apilens-java-extractor"
+rootProject.name = "tacet-java-extractor"

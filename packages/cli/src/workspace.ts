@@ -9,7 +9,7 @@ import {
   IndexStore,
   loadConfig,
   ProjectModel,
-  type ApilensConfig,
+  type TacetConfig,
   type AiProvider,
   type ApiUsage,
   type BackendManifest,
@@ -18,12 +18,12 @@ import {
   type FrontendIndexUpdate,
   type FrontendManifest,
   type VerifiedChangeReport,
-} from "@apilens/core";
-import { JavaExtractor } from "@apilens/extractor-java";
-import { TypeScriptProject } from "@apilens/extractor-typescript";
+} from "@tacet/core";
+import { JavaExtractor } from "@tacet/extractor-java";
+import { TypeScriptProject } from "@tacet/extractor-typescript";
 import { changedSourceFiles, hasChangesBetween, materializeAtRef } from "./git.js";
 
-export const DEFAULT_INDEX_PATH = ".apilens/index.db";
+export const DEFAULT_INDEX_PATH = ".tacet/index.db";
 
 export interface IndexFrontendOptions {
   configPath?: string;
@@ -99,7 +99,7 @@ interface ChangeInputs {
   frontend: FrontendManifest;
   before: BackendManifest;
   after: BackendManifest;
-  config: ApilensConfig;
+  config: TacetConfig;
 }
 
 const EMPTY_CHANGE_REPORT: ChangeReport = {
@@ -128,7 +128,7 @@ export interface CheckOptions {
  * frontend project between calls so repeated updates only re-read the files
  * that changed.
  */
-export class ApiLensWorkspace {
+export class TacetWorkspace {
   readonly indexPath: string;
   private project: TypeScriptProject | null = null;
 
@@ -222,9 +222,9 @@ export class ApiLensWorkspace {
       before: store.readBackendManifest(),
       config: this.configPath ? loadConfig(this.configPath) : store.readConfig(),
     }));
-    if (!frontend) throw new Error(`No frontend index in ${this.indexPath}. Run \`apilens index <frontendDir>\` first.`);
+    if (!frontend) throw new Error(`No frontend index in ${this.indexPath}. Run \`tacet index <frontendDir>\` first.`);
     if (!before) {
-      throw new Error("No baseline backend contract in the index. Run `apilens extract-backend <dir>` on the current backend first.");
+      throw new Error("No baseline backend contract in the index. Run `tacet extract-backend <dir>` on the current backend first.");
     }
     const after = await new JavaExtractor({ jarPath: options.jarPath }).extract(root);
     if (options.save) this.withStore((store) => store.writeBackendManifest(after));
@@ -236,7 +236,7 @@ export class ApiLensWorkspace {
     const root = resolve(backendDir);
     const model = this.model();
     if (!hasChangesBetween(root, options.base, options.head)) return null;
-    const scratch = mkdtempSync(join(tmpdir(), "apilens-diff-"));
+    const scratch = mkdtempSync(join(tmpdir(), "tacet-diff-"));
     try {
       const extractor = new JavaExtractor({ jarPath: options.jarPath });
       const beforeDir = materializeAtRef(root, options.base, join(scratch, "base"));
@@ -258,7 +258,7 @@ export class ApiLensWorkspace {
   model(): ProjectModel {
     return this.withStore((store) => {
       const frontend = store.readFrontendManifest();
-      if (!frontend) throw new Error(`No frontend index in ${this.indexPath}. Run \`apilens index <frontendDir>\` first.`);
+      if (!frontend) throw new Error(`No frontend index in ${this.indexPath}. Run \`tacet index <frontendDir>\` first.`);
       const config = this.configPath ? loadConfig(this.configPath) : store.readConfig();
       return new ProjectModel(frontend, store.readBackendManifest(), config);
     });
@@ -302,10 +302,10 @@ export class ApiLensWorkspace {
     return [...apis.values()].sort((a, b) => a.apiKey.localeCompare(b.apiKey));
   }
 
-  private resolveConfig(frontendRoot: string, configPath?: string): ApilensConfig {
+  private resolveConfig(frontendRoot: string, configPath?: string): TacetConfig {
     const explicit = configPath ?? this.configPath;
     if (explicit) return loadConfig(explicit);
-    const local = join(frontendRoot, "apilens.config.json");
+    const local = join(frontendRoot, "tacet.config.json");
     return existsSync(local) ? loadConfig(local) : {};
   }
 

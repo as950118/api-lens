@@ -69,7 +69,7 @@ const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2
  */
 export function checkContract(model: ProjectModel, options: ContractCheckOptions = {}): ContractReport {
   if (!model.hasBackend) {
-    throw new Error("The index has no backend manifest. Run `apilens extract-backend <dir> --index <db>` first.");
+    throw new Error("The index has no backend manifest. Run `tacet extract-backend <dir> --index <db>` first.");
   }
   const scope = options.files ? new Set(options.files) : null;
   const { calls, accesses } = selectScope(model, scope);
@@ -101,7 +101,7 @@ export function checkContract(model: ProjectModel, options: ContractCheckOptions
 
     if (link.status === "unresolved") {
       issue("info", "UNRESOLVED_ENDPOINT", `The URL of \`${call.calleeExpression}\` cannot be determined statically`,
-        "Add the client to `apiClientMap` in apilens.config.json");
+        "Add the client to `apiClientMap` in tacet.config.json");
     } else if (link.status === "not-found") {
       issue("error", "ENDPOINT_NOT_FOUND", `Backend has no endpoint for ${call.method} ${call.endpointPattern}`,
         link.candidates.length ? `Similar endpoints: ${link.candidates.join(", ")}` : null);
@@ -224,7 +224,7 @@ function checkAccess(
     });
   const shown = formatAccessPath(access.path);
   const derived = access.flow === "derived";
-  const via = derived ? " (value passed through a function ApiLens could not follow)" : "";
+  const via = derived ? " (value passed through a function Tacet could not follow)" : "";
 
   if (endpoint.response === null) {
     push(derived ? "warning" : "error", "NO_RESPONSE_BODY", `Reads \`${shown}\` but ${endpoint.id} returns no body${via}`);

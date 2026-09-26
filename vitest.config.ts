@@ -6,11 +6,11 @@ const src = (pkg: string) => fileURLToPath(new URL(`./packages/${pkg}/src/index.
 export default defineConfig({
   resolve: {
     alias: {
-      "@apilens/core": src("core"),
-      "@apilens/extractor-typescript": src("extractor-typescript"),
-      "@apilens/extractor-java": src("extractor-java"),
-      "@apilens/cli": src("cli"),
-      "@apilens/ai-anthropic": src("ai-anthropic"),
+      "@tacet/core": src("core"),
+      "@tacet/extractor-typescript": src("extractor-typescript"),
+      "@tacet/extractor-java": src("extractor-java"),
+      "@tacet/cli": src("cli"),
+      "@tacet/ai-anthropic": src("ai-anthropic"),
     },
   },
   test: {

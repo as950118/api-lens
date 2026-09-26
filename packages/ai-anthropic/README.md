@@ -1,5 +1,5 @@
-# @apilens/ai-anthropic
+# @tacet/ai-anthropic
 
-Claude provider for ApiLens AI verification.
+Claude provider for Tacet AI verification.
 
-Part of [ApiLens](https://github.com/heonjinjeong/api-lens). Most users want [`@apilens/cli`](https://www.npmjs.com/package/@apilens/cli).
+Part of [Tacet](https://github.com/heonjinjeong/tacet). Most users want [`@tacet/cli`](https://www.npmjs.com/package/@tacet/cli).

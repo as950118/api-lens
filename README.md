@@ -1,4 +1,4 @@
-# ApiLens
+# Tacet
 
 Backend API가 바뀌었을 때, 기존 Frontend 코드 중 **무엇을 고쳐야 하는지** 배포 전에 알려주는 CLI 도구.
 
@@ -9,40 +9,40 @@ AI는 정적으로 확정할 수 없는 부분을 검증하는 데만 쓴다. �
 
 | 사용처 | 설치 |
 |---|---|
-| CLI (npm) | `npm install -g @apilens/cli` → `apilens ...` |
-| MCP 서버 | `npx -y @apilens/mcp --frontend ... --backend ...` |
-| Node/TS 라이브러리 | `npm install @apilens/cli` (`ApiLensWorkspace`, `runCi`) / `@apilens/mcp` |
-| Python / FastMCP | `pip install "api-lens[fastmcp]"` (import 이름 `apilens`) |
-| Gradle | `plugins { id("io.github.heonjinjeong.apilens") version "0.1.0" }` |
-| Maven | `io.github.heonjinjeong:apilens-maven-plugin:0.1.0` |
+| CLI (npm) | `npm install -g @tacet/cli` → `tacet ...` |
+| MCP 서버 | `npx -y @tacet/mcp --frontend ... --backend ...` |
+| Node/TS 라이브러리 | `npm install @tacet/cli` (`TacetWorkspace`, `runCi`) / `@tacet/mcp` |
+| Python / FastMCP | `pip install "tacet[fastmcp]"` (import 이름 `tacet`) |
+| Gradle | `plugins { id("io.github.heonjinjeong.tacet") version "0.1.0" }` |
+| Maven | `io.github.heonjinjeong:tacet-maven-plugin:0.1.0` |
 
-모든 형태가 같은 CLI(`@apilens/cli`)를 실행한다. Python과 Gradle/Maven 플러그인은 `apilens`가 PATH에 없으면
+모든 형태가 같은 CLI(`@tacet/cli`)를 실행한다. Python과 Gradle/Maven 플러그인은 `tacet`가 PATH에 없으면
 같은 버전을 `npx`로 자동 실행하므로, 실행 환경에 Node.js 22.13+(와 backend 분석용 Java 17+)만 있으면 된다.
 
 ### Gradle
 
 ```kotlin
-plugins { id("io.github.heonjinjeong.apilens") version "0.1.0" }
+plugins { id("io.github.heonjinjeong.tacet") version "0.1.0" }
 
-apilens {
+tacet {
     frontendDir = file("../frontend")
     // backendDir = 현재 프로젝트 (기본)
     // failOn = "definite" | "likely" | "possible" | "never"
     // checkFailOn = "error" | "warning" | "never"
     // aiProvider = "anthropic"          // ANTHROPIC_API_KEY
 }
-tasks.check { dependsOn("apilensCheck") }
+tasks.check { dependsOn("tacetCheck") }
 ```
 
-`./gradlew apilensCheck -Papilens.base=origin/main` — git 기준 비교. base가 없으면 `build/apilens/index.db`에 저장된
-이전 계약과 비교한다(첫 실행이 기준이 된다). 리포트: `build/apilens/report.md`.
+`./gradlew tacetCheck -Ptacet.base=origin/main` — git 기준 비교. base가 없으면 `build/tacet/index.db`에 저장된
+이전 계약과 비교한다(첫 실행이 기준이 된다). 리포트: `build/tacet/report.md`.
 
 ### Maven
 
 ```xml
 <plugin>
   <groupId>io.github.heonjinjeong</groupId>
-  <artifactId>apilens-maven-plugin</artifactId>
+  <artifactId>tacet-maven-plugin</artifactId>
   <version>0.1.0</version>
   <executions><execution><goals><goal>check</goal></goals></execution></executions>
   <configuration>
@@ -52,7 +52,7 @@ tasks.check { dependsOn("apilensCheck") }
 </plugin>
 ```
 
-`mvn verify -Dapilens.base=origin/main` (`verify` 단계에 연결됨). 리포트: `target/apilens/report.md`.
+`mvn verify -Dtacet.base=origin/main` (`verify` 단계에 연결됨). 리포트: `target/tacet/report.md`.
 
 ## 요구사항
 
@@ -72,7 +72,7 @@ npm run test:jvm    # Java extractor 단위 테스트
 
 ## 사용법
 
-모든 명령은 같은 index DB(`-i, --index`, 기본 `.apilens/index.db`)를 공유한다.
+모든 명령은 같은 index DB(`-i, --index`, 기본 `.tacet/index.db`)를 공유한다.
 
 ### 1. Frontend 인덱싱
 
@@ -81,7 +81,7 @@ node packages/cli/dist/bin.js index ./frontend
 ```
 
 ```text
-ApiLens index written to /path/.apilens/index.db
+Tacet index written to /path/.tacet/index.db
   Files:              9
   Functions:          22
   API calls:          15 (15 with resolved endpoint)
@@ -124,7 +124,7 @@ node packages/cli/dist/bin.js index ./frontend --changed-since origin/main --che
 ```
 
 ```text
-ApiLens contract check: FAIL  (scope: 1 file)
+Tacet contract check: FAIL  (scope: 1 file)
 
 APIs checked (1):
   ✗ GET /products/{id}  1 call site, 1 field read  1 issue
@@ -142,14 +142,14 @@ Issues: 1 error, 0 warnings, 0 info
 ### 4. Impact — 바꾸면 어디까지 영향이 가나 (실제 변경 없이)
 
 ```bash
-apilens impact --api "GET /users/{id}"        # 호출 위치, 읽는 필드, 파일·컴포넌트
-apilens impact --file src/api/user.ts         # 이 파일의 API, client 함수 호출처, import하는 파일, blast radius
-apilens impact --field UserResponse.name      # 이 필드를 반환하는 모든 endpoint와 읽는 위치
-apilens impact --search profile               # 통합 검색
-apilens impact --summary                      # API/파일을 영향도 순으로, 안 쓰이는 endpoint
-apilens graph -o .apilens/graph.html          # 전체 인터랙티브 그래프
-apilens impact --file src/api/user.ts -f html -o impact.html   # 특정 질의의 그래프
-apilens impact --api "GET /users/{id}" -f mermaid              # PR 코멘트용 Mermaid
+tacet impact --api "GET /users/{id}"        # 호출 위치, 읽는 필드, 파일·컴포넌트
+tacet impact --file src/api/user.ts         # 이 파일의 API, client 함수 호출처, import하는 파일, blast radius
+tacet impact --field UserResponse.name      # 이 필드를 반환하는 모든 endpoint와 읽는 위치
+tacet impact --search profile               # 통합 검색
+tacet impact --summary                      # API/파일을 영향도 순으로, 안 쓰이는 endpoint
+tacet graph -o .tacet/graph.html          # 전체 인터랙티브 그래프
+tacet impact --file src/api/user.ts -f html -o impact.html   # 특정 질의의 그래프
+tacet impact --api "GET /users/{id}" -f mermaid              # PR 코멘트용 Mermaid
 ```
 
 HTML 그래프는 API → 응답 필드 → 함수/컴포넌트 → 파일의 계층 그래프다. 노드를 클릭하면 연결된 전체를 추적하고,
@@ -159,13 +159,13 @@ HTML 그래프는 API → 응답 필드 → 함수/컴포넌트 → 파일의 �
 
 ```bash
 # index에 저장된 계약(= frontend가 작성된 기준)과 지금의 backend 소스를 비교
-apilens analyze --backend ./backend               # --save 로 새 계약을 기준으로 저장
+tacet analyze --backend ./backend               # --save 로 새 계약을 기준으로 저장
 # git ref 두 개를 비교 (head 생략 = working tree). backend가 안 바뀌었으면 바로 PASS
-apilens diff --base origin/main --backend ./backend -f markdown -o api-changes.md
+tacet diff --base origin/main --backend ./backend -f markdown -o api-changes.md
 ```
 
 ```text
-ApiLens API change report: FAIL
+Tacet API change report: FAIL
 
 Changed APIs: 8   Breaking changes: 35   Frontend impact: 9 definite, 2 likely, 4 possible
 
@@ -181,7 +181,7 @@ GET /users/{id}  [changed]  FAIL
     LIKELY   src/pages/User.tsx:19  UserPage  user.age
              Uses `age`, which may now be null; Reads `age`; `age` changed int → String
     POSSIBLE src/pages/User.tsx:30  loadProfile  value.name
-             Reads `name`; ... (value passed through a function ApiLens could not follow)
+             Reads `name`; ... (value passed through a function Tacet could not follow)
 
 PUT /users/{id}  [moved → PUT /users/{id}/profile]  FAIL
     DEFINITE src/api/user.ts:12  userApi.updateUser  api.put(`/users/${id}`, body)
@@ -198,8 +198,8 @@ enum 값 추가·삭제. 영향은 `DEFINITE`(확실) / `LIKELY`(대부분 깨�
 
 ```bash
 export ANTHROPIC_API_KEY=...          # 또는 `ant auth login`
-apilens verify --backend ./backend                          # 저장된 계약 대비
-apilens verify --backend ./backend --base origin/main -f markdown
+tacet verify --backend ./backend                          # 저장된 계약 대비
+tacet verify --backend ./backend --base origin/main -f markdown
 # --provider anthropic (기본) --model <id> (기본 claude-opus-5) --effort low|medium|high|xhigh|max
 ```
 
@@ -217,20 +217,20 @@ GitHub Actions (이 저장소의 composite action, `examples/github-workflow.yml
 on: pull_request
 permissions: { contents: read, pull-requests: write }
 jobs:
-  apilens:
+  tacet:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: <owner>/api-lens@v1
+      - uses: <owner>/tacet@v1
         with: { frontend: frontend, backend: backend }
 ```
 
 AI 검증을 켜려면 `with: { ai-provider: anthropic }`와 `env: { ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} }`를 추가한다.
 
 PR마다 (1) backend API 변경이 영향을 주는 frontend 코드, (2) 변경된 frontend 파일의 계약 위반을 검사해서 job summary와
-PR 코멘트(갱신)로 남기고, 기준 이상이면 job을 실패시킨다. 다른 CI에서는 `scripts/apilens-ci.sh`를 그대로 쓴다
-(`APILENS_FRONTEND`, `APILENS_BACKEND`, `APILENS_BASE`, `APILENS_FAIL_ON`, `APILENS_CHECK_FAIL_ON`).
+PR 코멘트(갱신)로 남기고, 기준 이상이면 job을 실패시킨다. 다른 CI에서는 `scripts/tacet-ci.sh`를 그대로 쓴다
+(`TACET_FRONTEND`, `TACET_BACKEND`, `TACET_BASE`, `TACET_FAIL_ON`, `TACET_CHECK_FAIL_ON`).
 
 ### 8. MCP / 라이브러리
 
@@ -243,10 +243,10 @@ PR 코멘트(갱신)로 남기고, 기준 이상이면 job을 실패시킨다. �
 ```json
 {
   "mcpServers": {
-    "apilens": {
+    "tacet": {
       "command": "node",
-      "args": ["/path/to/api-lens/packages/mcp/dist/bin.js",
-               "--index", "/path/to/project/.apilens/index.db",
+      "args": ["/path/to/tacet/packages/mcp/dist/bin.js",
+               "--index", "/path/to/project/.tacet/index.db",
                "--frontend", "/path/to/project/frontend",
                "--backend", "/path/to/project/backend"]
     }
@@ -258,10 +258,10 @@ PR 코멘트(갱신)로 남기고, 기준 이상이면 job을 실패시킨다. �
 
 ```ts
 import { FastMCP } from "fastmcp";
-import { addApiLensTools } from "@apilens/mcp";
+import { addTacetTools } from "@tacet/mcp";
 
 const server = new FastMCP({ name: "my-dev-tools", version: "1.0.0" });
-addApiLensTools(server, { frontendDir: "./frontend", backendDir: "./backend", prefix: "apilens_" });
+addTacetTools(server, { frontendDir: "./frontend", backendDir: "./backend", prefix: "tacet_" });
 await server.start({ transportType: "stdio" });
 ```
 
@@ -269,16 +269,16 @@ await server.start({ transportType: "stdio" });
 
 ```python
 from fastmcp import FastMCP
-from apilens.fastmcp import register_tools
+from tacet.fastmcp import register_tools
 
 mcp = FastMCP("my-server")
-register_tools(mcp, frontend_dir="./frontend", backend_dir="./backend", prefix="apilens_")
+register_tools(mcp, frontend_dir="./frontend", backend_dir="./backend", prefix="tacet_")
 ```
 
-다른 MCP 프레임워크에는 `createApiLensTools()`(zod schema + JSON 반환 handler)를, 코드에서 직접 쓸 때는
-`ApiLensWorkspace`(`@apilens/cli`)를 사용한다. workspace는 파싱된 frontend를 메모리에 유지해서 반복 갱신이 빠르다.
+다른 MCP 프레임워크에는 `createTacetTools()`(zod schema + JSON 반환 handler)를, 코드에서 직접 쓸 때는
+`TacetWorkspace`(`@tacet/cli`)를 사용한다. workspace는 파싱된 frontend를 메모리에 유지해서 반복 갱신이 빠르다.
 
-### apilens.config.json
+### tacet.config.json
 
 ```json
 {

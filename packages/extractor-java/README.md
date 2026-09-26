@@ -1,5 +1,5 @@
-# @apilens/extractor-java
+# @tacet/extractor-java
 
-ApiLens Spring Boot extractor (JavaParser): endpoints and DTO JSON shapes.
+Tacet Spring Boot extractor (JavaParser): endpoints and DTO JSON shapes.
 
-Part of [ApiLens](https://github.com/heonjinjeong/api-lens). Most users want [`@apilens/cli`](https://www.npmjs.com/package/@apilens/cli).
+Part of [Tacet](https://github.com/heonjinjeong/tacet). Most users want [`@tacet/cli`](https://www.npmjs.com/package/@tacet/cli).

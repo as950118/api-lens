@@ -22,7 +22,7 @@ describe("IndexStore", () => {
   let store: IndexStore;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "apilens-index-store-"));
+    dir = mkdtempSync(join(tmpdir(), "tacet-index-store-"));
     store = IndexStore.open(join(dir, "index.db"));
   });
 

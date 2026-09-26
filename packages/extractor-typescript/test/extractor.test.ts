@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { FrontendManifest, PropertyAccessInfo } from "@apilens/core";
-import { loadConfig } from "@apilens/core";
+import type { FrontendManifest, PropertyAccessInfo } from "@tacet/core";
+import { loadConfig } from "@tacet/core";
 import { cpSync, readFileSync } from "node:fs";
 import { extractTypeScriptManifest, TypeScriptProject } from "../src/index.js";
 
@@ -26,7 +26,7 @@ describe("extractTypeScriptManifest (fixture frontend)", () => {
   beforeAll(() => {
     manifest = extractTypeScriptManifest(
       join(fixtures, "frontend"),
-      loadConfig(join(fixtures, "apilens.config.json")),
+      loadConfig(join(fixtures, "tacet.config.json")),
     );
   });
 
@@ -203,7 +203,7 @@ describe("TypeScriptProject.refresh", () => {
   let dir: string;
 
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), "apilens-refresh-"));
+    dir = mkdtempSync(join(tmpdir(), "tacet-refresh-"));
     cpSync(join(fixtures, "frontend"), dir, { recursive: true });
   });
 
@@ -236,7 +236,7 @@ describe("extractTypeScriptManifest (edge cases)", () => {
   let dir: string;
 
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), "apilens-ts-"));
+    dir = mkdtempSync(join(tmpdir(), "tacet-ts-"));
   });
 
   afterAll(() => {

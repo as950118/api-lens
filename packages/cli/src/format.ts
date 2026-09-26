@@ -1,4 +1,4 @@
-import { groupErrors } from "@apilens/core";
+import { groupErrors } from "@tacet/core";
 import type {
   ApiImpact,
   ChangeReport,
@@ -9,13 +9,13 @@ import type {
   FileImpact,
   ImpactSummary,
   SearchHit,
-} from "@apilens/core";
+} from "@tacet/core";
 import type { ExtractBackendResult, IndexFrontendResult } from "./workspace.js";
 
 export function formatIndexResult(r: IndexFrontendResult): string {
   const s = r.summary;
   const lines = [
-    `ApiLens index written to ${r.indexPath}`,
+    `Tacet index written to ${r.indexPath}`,
     `  Files:              ${s.files}`,
     `  Functions:          ${s.functions}`,
     `  API calls:          ${s.apiCalls} (${s.resolvedApiCalls} with resolved endpoint)`,
@@ -32,7 +32,7 @@ export function formatIndexResult(r: IndexFrontendResult): string {
 
 export function formatBackendResult(r: ExtractBackendResult, outPath?: string): string {
   const lines = [
-    `ApiLens backend contract written to ${r.indexPath}${outPath ? ` and ${outPath}` : ""}`,
+    `Tacet backend contract written to ${r.indexPath}${outPath ? ` and ${outPath}` : ""}`,
     `  Endpoints:  ${r.endpoints} (${r.changedEndpoints.length} added, changed or removed)`,
     `  DTOs:       ${r.dtos}`,
     `  Enums:      ${r.enums}`,
@@ -44,7 +44,7 @@ export function formatBackendResult(r: ExtractBackendResult, outPath?: string): 
 
 export function formatContractReport(report: ContractReport): string {
   const scope = report.scope ? `${report.scope.length} file${report.scope.length === 1 ? "" : "s"}` : "whole frontend";
-  const lines = [`ApiLens contract check: ${report.result}  (scope: ${scope})`, "", `APIs checked (${report.apis.length}):`];
+  const lines = [`Tacet contract check: ${report.result}  (scope: ${scope})`, "", `APIs checked (${report.apis.length}):`];
   const width = Math.max(0, ...report.apis.map((a) => a.apiKey.length));
   for (const api of report.apis) {
     const detail = api.status === "matched"
@@ -187,7 +187,7 @@ export function formatChangeReport(report: ChangeReport | VerifiedChangeReport):
   const c = report.counts;
   const verified = "ai" in report ? report : null;
   const lines = [
-    `ApiLens API change report: ${report.result}${verified ? `  (static analysis: ${verified.staticResult})` : ""}`,
+    `Tacet API change report: ${report.result}${verified ? `  (static analysis: ${verified.staticResult})` : ""}`,
     "",
     `Changed APIs: ${c.changedApis}   Breaking changes: ${c.breakingChanges}   Frontend impact: ${c.DEFINITE} definite, ${c.LIKELY} likely, ${c.POSSIBLE} possible`,
   ];

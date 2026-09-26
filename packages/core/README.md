@@ -1,5 +1,5 @@
-# @apilens/core
+# @tacet/core
 
-Language-agnostic ApiLens engine: IR, SQLite index, API linking, contract checks, change impact, AI verification.
+Language-agnostic Tacet engine: IR, SQLite index, API linking, contract checks, change impact, AI verification.
 
-Part of [ApiLens](https://github.com/heonjinjeong/api-lens). Most users want [`@apilens/cli`](https://www.npmjs.com/package/@apilens/cli).
+Part of [Tacet](https://github.com/heonjinjeong/tacet). Most users want [`@tacet/cli`](https://www.npmjs.com/package/@tacet/cli).

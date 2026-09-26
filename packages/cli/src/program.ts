@@ -13,7 +13,7 @@ import {
   type VerifiedChangeReport,
   type GraphAttachment,
   type ImpactGraph,
-} from "@apilens/core";
+} from "@tacet/core";
 import {
   formatApiImpact,
   formatChangeReport,
@@ -25,10 +25,10 @@ import {
   formatSearch,
   formatSummary,
 } from "./format.js";
-import type { Effort } from "@apilens/ai-anthropic";
+import type { Effort } from "@tacet/ai-anthropic";
 import { AI_PROVIDERS, createAiProvider } from "./ai.js";
 import { runCi, type CheckFailOn, type VerifyFailOn } from "./ci.js";
-import { ApiLensWorkspace, DEFAULT_INDEX_PATH } from "./workspace.js";
+import { TacetWorkspace, DEFAULT_INDEX_PATH } from "./workspace.js";
 
 const VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 
@@ -46,15 +46,15 @@ const failOnOption = () =>
 export function buildProgram(): Command {
   const program = new Command();
   program
-    .name("apilens")
+    .name("tacet")
     .description("Find the frontend code affected by backend API changes, and check frontend code against the real API")
     .version(VERSION)
     .option("-i, --index <path>", "index database", DEFAULT_INDEX_PATH)
-    .option("-c, --config <path>", "apilens.config.json (defaults to <frontendDir>/apilens.config.json at index time)");
+    .option("-c, --config <path>", "tacet.config.json (defaults to <frontendDir>/tacet.config.json at index time)");
 
   const workspace = () => {
     const opts = program.opts<{ index: string; config?: string }>();
-    return new ApiLensWorkspace(opts.index, opts.config);
+    return new TacetWorkspace(opts.index, opts.config);
   };
 
   program
@@ -166,7 +166,7 @@ export function buildProgram(): Command {
         value = summary;
         text = formatSummary(summary);
         graph = analyzer.fullGraph();
-        title = "ApiLens impact overview";
+        title = "Tacet impact overview";
       } else {
         throw new Error("Specify one of --api, --file, --field, --search or --summary");
       }
@@ -177,12 +177,12 @@ export function buildProgram(): Command {
     .command("graph")
     .description("Render the full API → field → function → component → file graph")
     .addOption(formatOption(["html", "mermaid", "json"], "html"))
-    .option("-o, --out <path>", "output file (default .apilens/graph.html for html)")
+    .option("-o, --out <path>", "output file (default .tacet/graph.html for html)")
     .action((opts: { format: Format; out?: string }) => {
       const analyzer = workspace().impact();
       const graph = analyzer.fullGraph();
-      const out = opts.out ?? (opts.format === "html" ? ".apilens/graph.html" : undefined);
-      emit(render(opts.format, { value: graph, text: "", graph, title: "ApiLens impact graph" }), out);
+      const out = opts.out ?? (opts.format === "html" ? ".tacet/graph.html" : undefined);
+      emit(render(opts.format, { value: graph, text: "", graph, title: "Tacet impact graph" }), out);
     });
 
   const impactFailOn = () =>
@@ -222,7 +222,7 @@ export function buildProgram(): Command {
         return;
       }
       emit(
-        renderChanges(report, opts.format, `ApiLens: backend API changes ${report.base}...${report.head}`),
+        renderChanges(report, opts.format, `Tacet: backend API changes ${report.base}...${report.head}`),
         opts.out,
       );
       setImpactExitCode(report, opts.failOn);
@@ -234,9 +234,9 @@ export function buildProgram(): Command {
     .requiredOption("--frontend <dir>", "frontend project root")
     .requiredOption("--backend <dir>", "backend project root")
     .option("--base <ref>", "git ref to compare against (without it, the stored backend contract is the baseline)")
-    .option("--out <dir>", "report directory", ".apilens")
-    .option("--ai-provider <name>", "verify undecided findings with AI (e.g. anthropic)", process.env.APILENS_AI_PROVIDER)
-    .option("--ai-model <model>", "model id for AI verification", process.env.APILENS_AI_MODEL)
+    .option("--out <dir>", "report directory", ".tacet")
+    .option("--ai-provider <name>", "verify undecided findings with AI (e.g. anthropic)", process.env.TACET_AI_PROVIDER)
+    .option("--ai-model <model>", "model id for AI verification", process.env.TACET_AI_MODEL)
     .addOption(impactFailOn())
     .addOption(new Option("--check-fail-on <level>", "contract check failure level").choices(["error", "warning", "never"]).default("error"))
     .addOption(new Option("--verify-fail-on <level>", "with --ai-provider: verified result failure level").choices(["fail", "warning", "never"]).default("fail"))
@@ -261,7 +261,7 @@ export function buildProgram(): Command {
       });
       if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, readFileSync(result.files.report, "utf8"));
       const changes = result.changes ? `backend changes ${result.changes.result}` : "backend changes skipped";
-      console.log(`ApiLens: ${changes}, contract check ${result.contract.result} -> ${result.files.report}`);
+      console.log(`Tacet: ${changes}, contract check ${result.contract.result} -> ${result.files.report}`);
       process.exitCode = result.exitCode;
     });
 
@@ -271,8 +271,8 @@ export function buildProgram(): Command {
     .requiredOption("--backend <dir>", "backend project root with the changed API")
     .option("--base <ref>", "compare git refs (like `diff`) instead of the contract stored in the index")
     .option("--head <ref>", "with --base: git ref with the change (default: the working tree)")
-    .addOption(new Option("--provider <name>", "AI provider").choices([...AI_PROVIDERS]).default(process.env.APILENS_AI_PROVIDER ?? "anthropic"))
-    .option("--model <model>", "model id (default: $APILENS_AI_MODEL or the provider default)")
+    .addOption(new Option("--provider <name>", "AI provider").choices([...AI_PROVIDERS]).default(process.env.TACET_AI_PROVIDER ?? "anthropic"))
+    .option("--model <model>", "model id (default: $TACET_AI_MODEL or the provider default)")
     .addOption(new Option("--effort <level>", "reasoning effort").choices(["low", "medium", "high", "xhigh", "max"]))
     .option("--max-candidates <n>", "at most this many locations per endpoint are sent to the model", (v) => Number.parseInt(v, 10), 25)
     .option("--jar <path>", "Java extractor JAR (defaults to the bundled one)")
@@ -295,7 +295,7 @@ export function buildProgram(): Command {
         jarPath: opts.jar,
         maxCandidatesPerEndpoint: opts.maxCandidates,
       });
-      const title = report.base ? `ApiLens: verified API changes ${report.base}...${report.head}` : "ApiLens: verified API change report";
+      const title = report.base ? `Tacet: verified API changes ${report.base}...${report.head}` : "Tacet: verified API change report";
       emit(renderChanges(report, opts.format, title), opts.out);
       if ((opts.failOn === "fail" && report.result === "FAIL") || (opts.failOn === "warning" && report.result !== "PASS")) {
         process.exitCode = 1;

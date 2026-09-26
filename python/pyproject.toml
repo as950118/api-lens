@@ -1,13 +1,13 @@
 [project]
-name = "api-lens"
+name = "tacet"
 version = "0.1.0"
-description = "Find the frontend code a backend API change breaks: Python bindings and FastMCP tools for ApiLens (TypeScript frontend + Spring Boot backend)"
+description = "Find the frontend code a backend API change breaks: Python bindings and FastMCP tools for Tacet (TypeScript frontend + Spring Boot backend)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Heonjin Jeong" }]
-keywords = ["apilens", "api", "breaking-changes", "contract", "spring-boot", "typescript", "mcp", "fastmcp"]
+keywords = ["tacet", "api", "breaking-changes", "contract", "spring-boot", "typescript", "mcp", "fastmcp"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
@@ -23,9 +23,9 @@ dependencies = []
 fastmcp = ["fastmcp>=2.10"]
 
 [project.urls]
-Homepage = "https://github.com/heonjinjeong/api-lens"
-Repository = "https://github.com/heonjinjeong/api-lens"
-Issues = "https://github.com/heonjinjeong/api-lens/issues"
+Homepage = "https://github.com/heonjinjeong/tacet"
+Repository = "https://github.com/heonjinjeong/tacet"
+Issues = "https://github.com/heonjinjeong/tacet/issues"
 
 [dependency-groups]
 dev = ["pytest>=8", "fastmcp>=2.10"]
@@ -35,10 +35,10 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/apilens"]
+packages = ["src/tacet"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/apilens", "tests", "README.md", "LICENSE"]
+include = ["src/tacet", "tests", "README.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

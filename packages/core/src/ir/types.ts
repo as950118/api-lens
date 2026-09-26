@@ -1,5 +1,5 @@
 /**
- * ApiLens Intermediate Representation (IR).
+ * Tacet Intermediate Representation (IR).
  *
  * Every language extractor (TypeScript, Java, and future languages) produces
  * a Manifest built from these types. The core engine (index-store, diff,
@@ -55,11 +55,11 @@ export interface FunctionInfo {
  * How an API call's endpoint was determined:
  * - direct:  the call itself is axios.* / fetch with a statically resolvable URL
  * - wrapper: a call to a function whose return value comes from an API call (e.g. getUser(id))
- * - config:  mapped explicitly via apilens.config.json `apiClientMap`
+ * - config:  mapped explicitly via tacet.config.json `apiClientMap`
  */
 export type ApiCallResolution = "direct" | "wrapper" | "config";
 
-/** Statically known request keys. `null` means ApiLens could not determine them (e.g. a variable was passed). */
+/** Statically known request keys. `null` means Tacet could not determine them (e.g. a variable was passed). */
 export interface RequestShape {
   queryKeys: string[] | null;
   bodyKeys: string[] | null;
@@ -86,7 +86,7 @@ export interface ApiCallInfo {
 
 /**
  * - direct:  the accessed value is provably the API response body (or a sub-part of it)
- * - derived: the value passed through a function ApiLens could not follow (e.g. transform(user)),
+ * - derived: the value passed through a function Tacet could not follow (e.g. transform(user)),
  *            so the path is relative to that function's result, not the response body
  */
 export type DataFlowKind = "direct" | "derived";
@@ -134,7 +134,7 @@ export type TypeRef =
   | { kind: "map"; value: TypeRef }
   /** A generic parameter of the enclosing DTO, e.g. `T` in `ApiResponse<T>`. */
   | { kind: "typeParameter"; name: string }
-  /** A type ApiLens could not resolve (e.g. from an external library). */
+  /** A type Tacet could not resolve (e.g. from an external library). */
   | { kind: "unknown"; name: string };
 
 export interface ParamInfo {

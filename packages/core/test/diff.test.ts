@@ -176,7 +176,7 @@ describe("analyzeChangeImpact", () => {
 
   it("renders Markdown for PR comments", () => {
     const md = renderChangeReportMarkdown(report);
-    expect(md).toContain("## ApiLens: backend API change report: FAIL");
+    expect(md).toContain("## Tacet: backend API change report: FAIL");
     expect(md).toContain("| `PUT /users/{id}` | moved → `PUT /users/{id}/profile` |");
     expect(md).toContain("| DEFINITE | `src/User.tsx:20` UserPage | `x.name` |");
   });

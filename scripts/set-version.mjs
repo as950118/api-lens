@@ -25,16 +25,16 @@ const targets = [
       const json = JSON.parse(text);
       json.version = version;
       for (const deps of [json.dependencies, json.devDependencies]) {
-        for (const name of Object.keys(deps ?? {})) if (name.startsWith("@apilens/")) deps[name] = `^${version}`;
+        for (const name of Object.keys(deps ?? {})) if (name.startsWith("@tacet/")) deps[name] = `^${version}`;
       }
       return JSON.stringify(json, null, 2) + "\n";
     },
   ]),
   regex("python/pyproject.toml", /^version = "([^"]+)"/m, (v) => `version = "${v}"`),
-  regex("python/src/apilens/_version.py", /__version__ = "([^"]+)"/, (v) => `__version__ = "${v}"`),
+  regex("python/src/tacet/_version.py", /__version__ = "([^"]+)"/, (v) => `__version__ = "${v}"`),
   regex("plugins/gradle/gradle.properties", /^version=(.+)$/m, (v) => `version=${v}`),
-  regex("plugins/maven/pom.xml", /<artifactId>apilens-maven-plugin<\/artifactId>\s*<version>([^<]+)<\/version>/, (v) =>
-    `<artifactId>apilens-maven-plugin</artifactId>\n  <version>${v}</version>`),
+  regex("plugins/maven/pom.xml", /<artifactId>tacet-maven-plugin<\/artifactId>\s*<version>([^<]+)<\/version>/, (v) =>
+    `<artifactId>tacet-maven-plugin</artifactId>\n  <version>${v}</version>`),
   regex("packages/extractor-java/jvm/build.gradle.kts", /^version = "([^"]+)"/m, (v) => `version = "${v}"`),
 ];
 

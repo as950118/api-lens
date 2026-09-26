@@ -1,6 +1,6 @@
-# ApiLens Architecture
+# Tacet Architecture
 
-ApiLens는 Backend API 변경이 기존 Frontend 코드를 깨뜨릴 가능성을 배포 전에 탐지한다.
+Tacet는 Backend API 변경이 기존 Frontend 코드를 깨뜨릴 가능성을 배포 전에 탐지한다.
 분석은 세 단계로 명확히 분리된다.
 
 ```text
@@ -17,11 +17,11 @@ AI는 핵심 분석 엔진이 아니라 Verification Layer이며, AI 없이도 1
 
 ```text
                       ┌──────────────────────────┐
-                      │    apilens CLI (Node/TS)  │
+                      │    tacet CLI (Node/TS)  │
                       └────────────┬─────────────┘
                                    │
                       ┌────────────▼─────────────┐
-                      │  @apilens/core            │
+                      │  @tacet/core            │
                       │  (language-agnostic)      │
                       │  - IR schema              │
                       │  - Index store (SQLite)   │
@@ -60,7 +60,7 @@ packages/
 │       ├── extractor/     LanguageExtractor 인터페이스, SubprocessExtractor
 │       ├── analysis/      Phase 3: 연결(link), contract check, impact 질의, graph
 │       ├── report/        graph renderer (Mermaid, 인터랙티브 HTML)
-│       ├── config.ts      apilens.config.json (apiClientMap, linking)
+│       ├── config.ts      tacet.config.json (apiClientMap, linking)
 │       ├── path.ts        path 정규화 (frontend/backend 공용)
 │       └── ai/            Phase 6: AiProvider 인터페이스, prompt, 검증 오케스트레이션
 ├── extractor-typescript/  Phase 1: ts-morph 기반 Frontend 분석
@@ -69,13 +69,13 @@ packages/
 │       ├── extractor.ts   Manifest 생성
 │       └── endpoint.ts    URL 표현식 → path pattern, query/body key 추출
 ├── extractor-java/        Phase 2: Spring backend 분석
-│   ├── jvm/               JavaParser 기반 extractor (Gradle → apilens-java-extractor.jar)
+│   ├── jvm/               JavaParser 기반 extractor (Gradle → tacet-java-extractor.jar)
 │   └── src/               JavaExtractor (JAR를 subprocess로 실행)
 ├── ai-anthropic/          Phase 6: Claude provider (@anthropic-ai/sdk)
 ├── mcp/                   MCP: stdio 서버, fastmcp adapter, tool 정의 (python/ 은 Python 바인딩)
-└── cli/                   apilens 바이너리
+└── cli/                   tacet 바이너리
     └── src/
-        ├── workspace.ts   ApiLensWorkspace — CLI/MCP가 공유하는 라이브러리 진입점
+        ├── workspace.ts   TacetWorkspace — CLI/MCP가 공유하는 라이브러리 진입점
         ├── program.ts     커맨드 정의
         └── format.ts      텍스트 출력
 ```
@@ -138,16 +138,16 @@ shadowing이나 다른 파일에서 import한 함수도 정확히 구분된다. 
 - `axios.get/post/put/delete/patch`, `axios.create()`로 만든 인스턴스(다른 모듈에서 import해도 인식)
 - `fetch(url, { method })` (기본 GET)
 - Wrapper 함수 (위 참조)
-- `apilens.config.json`의 `apiClientMap` (추론이 불가능한 client용 명시적 매핑, 추론보다 우선)
+- `tacet.config.json`의 `apiClientMap` (추론이 불가능한 client용 명시적 매핑, 추론보다 우선)
 
 URL은 정적으로 해석 가능한 경우만 패턴화한다: 문자열, 템플릿 리터럴(`` `/users/${id}` ``), 문자열 연결(`"/users/" + id`)은
 `/users/{param}`이 되고, 완전히 동적인 URL은 `null`로 둔다(추측하지 않음).
 
 ## 5. Java API 분석 방법 (Phase 2, 구현됨)
 
-`packages/extractor-java/jvm` — JavaParser 기반 독립 JAR. `java -jar apilens-java-extractor.jar <backendDir>` →
-stdout에 `BackendManifest` JSON. Node 쪽 `@apilens/extractor-java`가 `SubprocessExtractor`로 실행한다.
-JDK 17+에서 동작하며 CLI는 `apilens extract-backend <dir>`.
+`packages/extractor-java/jvm` — JavaParser 기반 독립 JAR. `java -jar tacet-java-extractor.jar <backendDir>` →
+stdout에 `BackendManifest` JSON. Node 쪽 `@tacet/extractor-java`가 `SubprocessExtractor`로 실행한다.
+JDK 17+에서 동작하며 CLI는 `tacet extract-backend <dir>`.
 
 **이름 해석은 소스만으로 한다.** JavaSymbolSolver는 정확한 해석을 위해 Spring·Lombok 등 의존성 JAR 전체를 classpath로
 요구하는데, 이는 CI에서 backend를 빌드해야 한다는 뜻이다. 대신 `SourceIndex`가 import / 같은 package /
@@ -268,14 +268,14 @@ ChangeReport ──▶ verifyChangeReport (core, vendor 중립)
 
 **Provider** — `packages/ai-anthropic` (`AnthropicProvider`)
 - 공식 `@anthropic-ai/sdk`의 `client.beta.messages.parse` + `betaZodOutputFormat`(구조화된 출력)로 스키마에 맞는 verdict만 받는다.
-- 기본 모델 `claude-opus-5`(`--model` / `APILENS_AI_MODEL`), adaptive thinking, `--effort` 선택.
+- 기본 모델 `claude-opus-5`(`--model` / `TACET_AI_MODEL`), adaptive thinking, `--effort` 선택.
 - 서버 측 refusal fallback(`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`) 사용. `refusal` / `max_tokens` stop reason은 오류로 처리.
 - 인증은 SDK 기본 해석 순서(`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ant auth login` profile).
 - 다른 provider(OpenAI, 로컬 LLM)는 `AiProvider`를 구현한 패키지를 추가하고 `createAiProvider`(`packages/cli/src/ai.ts`)에 등록한다. prompt와 검증 로직은 공유된다.
 
 ## 11. Frontend 변경 검사 · 영향 범위 탐색 (Phase 3, 구현됨)
 
-**Contract check** (`core/src/analysis/contract.ts`, `apilens check`)
+**Contract check** (`core/src/analysis/contract.ts`, `tacet check`)
 
 frontend의 API 사용을 실제 backend 계약과 대조한다. 범위를 파일로 제한하면 해당 파일의 호출 + 해당 파일이 읽는
 응답(다른 파일에서 호출해 props로 넘어온 것 포함)을 검사하고, 호출이 그 파일에 있으면 다른 파일의 필드 읽기까지 검사한다.
@@ -297,11 +297,11 @@ frontend의 API 사용을 실제 backend 계약과 대조한다. 범위를 파�
 **Frontend 변경 흐름**
 
 ```bash
-apilens index ./frontend --changed-since origin/main --check   # 갱신 → 사용 API 목록 → 계약 검사
-apilens index ./frontend --files src/pages/User.tsx --check
+tacet index ./frontend --changed-since origin/main --check   # 갱신 → 사용 API 목록 → 계약 검사
+tacet index ./frontend --files src/pages/User.tsx --check
 ```
 
-**Impact explorer** (`core/src/analysis/impact.ts`, `apilens impact`) — 실제 변경 없이 영향 범위를 본다.
+**Impact explorer** (`core/src/analysis/impact.ts`, `tacet impact`) — 실제 변경 없이 영향 범위를 본다.
 
 | 질의 | 결과 |
 |---|---|
@@ -325,22 +325,22 @@ endpoint ──has-field──▶ field ──reads──▶ reading fn/componen
 ## 12. Library / MCP (구현됨)
 
 ```text
-                 ┌───────────────────────── @apilens/mcp ─────────────────────────┐
- MCP client ───▶ │ apilens-mcp (stdio, 공식 SDK)   addApiLensTools(fastmcp server) │
-                 │            └──────── createApiLensTools() ─────────┘           │
+                 ┌───────────────────────── @tacet/mcp ─────────────────────────┐
+ MCP client ───▶ │ tacet-mcp (stdio, 공식 SDK)   addTacetTools(fastmcp server) │
+                 │            └──────── createTacetTools() ─────────┘           │
                  └──────────────────────────────┬─────────────────────────────────┘
- Python FastMCP ─▶ apilens (python) ─▶ CLI --format json ─┐
+ Python FastMCP ─▶ tacet (python) ─▶ CLI --format json ─┐
                                                           ▼
-                                   ApiLensWorkspace (@apilens/cli) ─▶ @apilens/core + extractors
+                                   TacetWorkspace (@tacet/cli) ─▶ @tacet/core + extractors
 ```
 
-- **`createApiLensTools(options)`**: 프레임워크 중립 tool 정의(zod schema + JSON 결과 handler, read-only annotation).
+- **`createTacetTools(options)`**: 프레임워크 중립 tool 정의(zod schema + JSON 결과 handler, read-only annotation).
   나머지는 모두 이 정의를 등록만 한다.
-- **`apilens-mcp`**: 공식 `@modelcontextprotocol/sdk` 기반 stdio 서버. `--index/--frontend/--backend/--config`
-  (또는 `APILENS_*` env)로 기본 경로를 주면 client는 경로를 몰라도 된다. 오류는 `isError` 결과로 반환.
-- **`addApiLensTools(fastmcpServer, { prefix })`**: TypeScript `fastmcp`의 `addTool`에 그대로 등록(실제 fastmcp
+- **`tacet-mcp`**: 공식 `@modelcontextprotocol/sdk` 기반 stdio 서버. `--index/--frontend/--backend/--config`
+  (또는 `TACET_*` env)로 기본 경로를 주면 client는 경로를 몰라도 된다. 오류는 `isError` 결과로 반환.
+- **`addTacetTools(fastmcpServer, { prefix })`**: TypeScript `fastmcp`의 `addTool`에 그대로 등록(실제 fastmcp
   타입으로 type-check, HTTP 통합 테스트).
-- **Python `apilens`**: CLI의 JSON 출력을 감싸는 `ApiLens` 클래스와 `apilens.fastmcp.register_tools(mcp)`.
+- **Python `tacet`**: CLI의 JSON 출력을 감싸는 `Tacet` 클래스와 `tacet.fastmcp.register_tools(mcp)`.
   분석 로직은 Node 쪽 한 곳에만 있고 Python은 호출만 한다(동작이 갈라지지 않음).
 - 상주 프로세스(MCP)에서는 workspace가 `TypeScriptProject`를 유지하므로 `index_frontend(files=...)`가 바뀐 파일만 다시 읽는다.
 - impact 결과의 graph는 `graph: none | mermaid | json`으로 크기를 조절한다(LLM에는 mermaid가 간결).
@@ -349,15 +349,15 @@ endpoint ──has-field──▶ field ──reads──▶ reading fn/componen
 
 ```text
 git push / PR → CI
-  apilens index <frontend>
-  apilens diff --base <base> --backend <backend>          backend at base vs head (git archive, 작업 트리 불변)
+  tacet index <frontend>
+  tacet diff --base <base> --backend <backend>          backend at base vs head (git archive, 작업 트리 불변)
       └─ backend 변경 없음 → 즉시 PASS (추출 생략)
-  apilens extract-backend <backend>
-  apilens check --changed-since <base>                    바뀐 frontend 파일 vs 새 계약
+  tacet extract-backend <backend>
+  tacet check --changed-since <base>                    바뀐 frontend 파일 vs 새 계약
   → report.md (job summary + PR 코멘트) → exit 1 (fail-on 기준)
 ```
 
-- `scripts/apilens-ci.sh`: 위 흐름 전체. 환경 변수만으로 설정하므로 어떤 CI에서도 사용 가능.
-- `action.yml`: Node/Java 설정 → ApiLens 빌드 → 스크립트 실행 → PR 코멘트 갱신(`gh pr comment --edit-last --create-if-none`).
+- `scripts/tacet-ci.sh`: 위 흐름 전체. 환경 변수만으로 설정하므로 어떤 CI에서도 사용 가능.
+- `action.yml`: Node/Java 설정 → Tacet 빌드 → 스크립트 실행 → PR 코멘트 갱신(`gh pr comment --edit-last --create-if-none`).
 - `--fail-on`: 변경 영향은 `definite|likely|possible|never`, 계약 검사는 `error|warning|never`.
-- `APILENS_AI_PROVIDER`(action: `ai-provider`)를 주면 `diff` 대신 `verify --base`를 실행한다. 자격 증명이 없거나 실패하면 정적 결과로 판정한다.
+- `TACET_AI_PROVIDER`(action: `ai-provider`)를 주면 `diff` 대신 `verify --base`를 실행한다. 자격 증명이 없거나 실패하면 정적 결과로 판정한다.

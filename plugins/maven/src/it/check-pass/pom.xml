@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>it.apilens</groupId>
+  <groupId>it.tacet</groupId>
   <artifactId>check-pass</artifactId>
   <version>1.0</version>
   <packaging>pom</packaging>
@@ -17,9 +17,9 @@
         <configuration>
           <frontendDir>${fixtures}/frontend</frontendDir>
           <backendDir>${fixtures}/backend</backendDir>
-          <config>${fixtures}/apilens.config.json</config>
+          <config>${fixtures}/tacet.config.json</config>
           <checkFailOn>never</checkFailOn>
-          <command><param>node</param><param>${apilensCli}</param></command>
+          <command><param>node</param><param>${tacetCli}</param></command>
         </configuration>
       </plugin>
     </plugins>

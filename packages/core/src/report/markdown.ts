@@ -5,7 +5,7 @@ import type { ContractReport } from "../analysis/contract.js";
 /** Markdown for PR comments / CI job summaries. */
 export function renderChangeReportMarkdown(
   report: ChangeReport | VerifiedChangeReport,
-  title = "ApiLens: backend API change report",
+  title = "Tacet: backend API change report",
 ): string {
   const c = report.counts;
   const verified = "ai" in report ? report : null;
@@ -70,7 +70,7 @@ export function renderChangeReportMarkdown(
   return lines.join("\n");
 }
 
-export function renderContractReportMarkdown(report: ContractReport, title = "ApiLens: frontend contract check"): string {
+export function renderContractReportMarkdown(report: ContractReport, title = "Tacet: frontend contract check"): string {
   const c = report.counts;
   const scope = report.scope ? `${report.scope.length} changed file${s(report.scope.length)}` : "whole frontend";
   const lines = [

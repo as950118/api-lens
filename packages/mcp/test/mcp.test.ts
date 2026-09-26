@@ -8,8 +8,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { FastMCP } from "fastmcp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DEFAULT_JAR_PATH } from "@apilens/extractor-java";
-import { addApiLensTools, createApiLensTools } from "../src/index.js";
+import { DEFAULT_JAR_PATH } from "@tacet/extractor-java";
+import { addTacetTools, createTacetTools } from "../src/index.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const fixtures = join(repoRoot, "test/fixtures");
@@ -35,7 +35,7 @@ const TOOL_NAMES = [
 
 let dir: string;
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "apilens-mcp-"));
+  dir = mkdtempSync(join(tmpdir(), "tacet-mcp-"));
 });
 afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
@@ -45,9 +45,9 @@ function text(result: unknown): string {
   return (result as { content: { type: string; text: string }[] }).content[0].text;
 }
 
-describe("createApiLensTools", () => {
+describe("createTacetTools", () => {
   it("defines every tool with a zod schema", () => {
-    const tools = createApiLensTools();
+    const tools = createTacetTools();
     expect(tools.map((t) => t.name).sort()).toEqual(TOOL_NAMES);
     const readOnly = tools.filter((t) => t.readOnly).map((t) => t.name).sort();
     expect(readOnly).toEqual(["check_contract", "diff_api_changes", "impact_of_api", "impact_of_field", "impact_of_file", "impact_summary", "search", "verify_api_changes"]);
@@ -58,15 +58,15 @@ describe("createApiLensTools", () => {
   });
 
   it("explains a missing default directory", async () => {
-    const index = createApiLensTools({ indexPath: join(dir, "none.db") }).find((t) => t.name === "index_frontend")!;
+    const index = createTacetTools({ indexPath: join(dir, "none.db") }).find((t) => t.name === "index_frontend")!;
     await expect(index.run({})).rejects.toThrow("`frontendDir` is required");
   });
 
   it.skipIf(!hasJar)("runs the index → check → impact flow", async () => {
     const tools = Object.fromEntries(
-      createApiLensTools({
+      createTacetTools({
         indexPath: join(dir, "tools.db"),
-        configPath: join(fixtures, "apilens.config.json"),
+        configPath: join(fixtures, "tacet.config.json"),
         frontendDir,
         backendDir,
       }).map((t) => [t.name, t]),
@@ -90,7 +90,7 @@ describe("createApiLensTools", () => {
     expect(changes.result).toBe("FAIL");
     expect(changes.markdown).toContain("moved → `PUT /users/{id}/profile`");
 
-    const verified = (await createApiLensTools({
+    const verified = (await createTacetTools({
       indexPath: join(dir, "tools.db"),
       backendDir: join(fixtures, "backend-v2"),
       aiProvider: {
@@ -107,7 +107,7 @@ describe("createApiLensTools", () => {
   });
 });
 
-describe.skipIf(!hasJar || !existsSync(bin))("apilens-mcp stdio server", () => {
+describe.skipIf(!hasJar || !existsSync(bin))("tacet-mcp stdio server", () => {
   let client: Client;
 
   beforeAll(async () => {
@@ -116,7 +116,7 @@ describe.skipIf(!hasJar || !existsSync(bin))("apilens-mcp stdio server", () => {
       new StdioClientTransport({
         command: process.execPath,
         args: [bin, "--index", join(dir, "stdio.db"), "--frontend", frontendDir, "--backend", backendDir,
-          "--config", join(fixtures, "apilens.config.json")],
+          "--config", join(fixtures, "tacet.config.json")],
         stderr: "pipe",
       }),
     );
@@ -126,7 +126,7 @@ describe.skipIf(!hasJar || !existsSync(bin))("apilens-mcp stdio server", () => {
     await client?.close();
   });
 
-  it("lists the ApiLens tools with annotations", async () => {
+  it("lists the Tacet tools with annotations", async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(TOOL_NAMES);
     expect(tools.find((t) => t.name === "check_contract")?.annotations?.readOnlyHint).toBe(true);
@@ -152,19 +152,19 @@ describe.skipIf(!hasJar || !existsSync(bin))("apilens-mcp stdio server", () => {
   });
 });
 
-describe.skipIf(!hasJar)("addApiLensTools on a real fastmcp server", () => {
+describe.skipIf(!hasJar)("addTacetTools on a real fastmcp server", () => {
   let server: FastMCP;
   let client: Client;
 
   beforeAll(async () => {
     server = new FastMCP({ name: "host", version: "1.0.0" });
     server.addTool({ name: "host_tool", description: "The host's own tool", execute: async () => "ok" });
-    const names = addApiLensTools(server, {
+    const names = addTacetTools(server, {
       indexPath: join(dir, "fastmcp.db"),
-      configPath: join(fixtures, "apilens.config.json"),
+      configPath: join(fixtures, "tacet.config.json"),
       frontendDir,
       backendDir,
-      prefix: "apilens_",
+      prefix: "tacet_",
     });
     expect(names).toHaveLength(TOOL_NAMES.length);
 
@@ -181,13 +181,13 @@ describe.skipIf(!hasJar)("addApiLensTools on a real fastmcp server", () => {
 
   it("registers prefixed tools next to the host's tools", async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["host_tool", ...TOOL_NAMES.map((n) => `apilens_${n}`)].sort());
+    expect(tools.map((t) => t.name).sort()).toEqual(["host_tool", ...TOOL_NAMES.map((n) => `tacet_${n}`)].sort());
   });
 
-  it("executes ApiLens tools through fastmcp", async () => {
-    await client.callTool({ name: "apilens_index_frontend", arguments: {} });
-    await client.callTool({ name: "apilens_extract_backend", arguments: {} });
-    const hits = JSON.parse(text(await client.callTool({ name: "apilens_search", arguments: { query: "UserCard" } })));
+  it("executes Tacet tools through fastmcp", async () => {
+    await client.callTool({ name: "tacet_index_frontend", arguments: {} });
+    await client.callTool({ name: "tacet_extract_backend", arguments: {} });
+    const hits = JSON.parse(text(await client.callTool({ name: "tacet_search", arguments: { query: "UserCard" } })));
     expect(hits).toContainEqual(expect.objectContaining({ kind: "component", label: "UserCard", apis: 1 }));
   });
 });

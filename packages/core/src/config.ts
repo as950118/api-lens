@@ -13,14 +13,14 @@ export interface LinkingConfig {
   backendBasePath?: string;
 }
 
-export interface ApilensConfig {
+export interface TacetConfig {
   /** Explicit mapping from API client calls (e.g. "userApi.getUser") to backend endpoints. */
   apiClientMap?: Record<string, ApiClientMapping>;
   linking?: LinkingConfig;
 }
 
-export function loadConfig(configPath: string | undefined): ApilensConfig {
+export function loadConfig(configPath: string | undefined): TacetConfig {
   if (!configPath) return {};
   if (!existsSync(configPath)) throw new Error(`Config file not found: ${configPath}`);
-  return JSON.parse(readFileSync(configPath, "utf8")) as ApilensConfig;
+  return JSON.parse(readFileSync(configPath, "utf8")) as TacetConfig;
 }

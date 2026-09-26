@@ -9,12 +9,12 @@ import {
   renderMermaid,
   type ChangeReport,
   type VerifiedChangeReport,
-} from "@apilens/core";
-import { ApiLensWorkspace, createAiProvider } from "@apilens/cli";
-import type { AiProvider } from "@apilens/core";
+} from "@tacet/core";
+import { TacetWorkspace, createAiProvider } from "@tacet/cli";
+import type { AiProvider } from "@tacet/core";
 
-export interface ApiLensToolOptions {
-  /** Index database. Defaults to .apilens/index.db (relative to the server's cwd). */
+export interface TacetToolOptions {
+  /** Index database. Defaults to .tacet/index.db (relative to the server's cwd). */
   indexPath?: string;
   configPath?: string;
   /** Default frontend root, so clients can call index_frontend without knowing paths. */
@@ -22,12 +22,12 @@ export interface ApiLensToolOptions {
   /** Default backend root for extract_backend. */
   backendDir?: string;
   /** Share a workspace with the host (it keeps the parsed frontend in memory between calls). */
-  workspace?: ApiLensWorkspace;
-  /** AI provider for verify_api_changes; defaults to $APILENS_AI_PROVIDER or "anthropic". */
+  workspace?: TacetWorkspace;
+  /** AI provider for verify_api_changes; defaults to $TACET_AI_PROVIDER or "anthropic". */
   aiProvider?: AiProvider;
 }
 
-export interface ApiLensTool<Shape extends z.ZodRawShape = z.ZodRawShape> {
+export interface TacetTool<Shape extends z.ZodRawShape = z.ZodRawShape> {
   name: string;
   title: string;
   description: string;
@@ -47,9 +47,9 @@ const graphOption = z
   .default("none")
   .describe('Attach the impact graph: "mermaid" (compact text), "json" (nodes/edges), or "none"');
 
-/** Framework-neutral ApiLens tool definitions (zod schemas + JSON-returning handlers). */
-export function createApiLensTools(options: ApiLensToolOptions = {}): ApiLensTool[] {
-  const ws = options.workspace ?? new ApiLensWorkspace(options.indexPath, options.configPath);
+/** Framework-neutral Tacet tool definitions (zod schemas + JSON-returning handlers). */
+export function createTacetTools(options: TacetToolOptions = {}): TacetTool[] {
+  const ws = options.workspace ?? new TacetWorkspace(options.indexPath, options.configPath);
   const frontendDir = (dir?: string) => required(dir ?? options.frontendDir, "frontendDir");
   const backendDir = (dir?: string) => required(dir ?? options.backendDir, "backendDir");
 
@@ -58,7 +58,7 @@ export function createApiLensTools(options: ApiLensToolOptions = {}): ApiLensToo
       name: "index_frontend",
       title: "Index the frontend",
       description:
-        "Analyze the TypeScript frontend and update the ApiLens index. Pass `files` (or `changedSince`, a git ref) " +
+        "Analyze the TypeScript frontend and update the Tacet index. Pass `files` (or `changedSince`, a git ref) " +
         "after editing code to get the APIs those files use; only changed index records are rewritten.",
       parameters: {
         frontendDir: z.string().optional().describe("Frontend root (defaults to the server's configured frontend)"),
@@ -122,7 +122,7 @@ export function createApiLensTools(options: ApiLensToolOptions = {}): ApiLensToo
       readOnly: true,
       run: async (a) =>
         report(await ws.diffBackend(backendDir(a.backendDir), { base: a.base, head: a.head }), a.format,
-          `ApiLens: backend API changes ${a.base}...${a.head ?? "working tree"}`),
+          `Tacet: backend API changes ${a.base}...${a.head ?? "working tree"}`),
     }),
     tool({
       name: "verify_api_changes",
@@ -143,9 +143,9 @@ export function createApiLensTools(options: ApiLensToolOptions = {}): ApiLensToo
       readOnly: true,
       run: async (a) => {
         const provider =
-          options.aiProvider ?? createAiProvider(process.env.APILENS_AI_PROVIDER ?? "anthropic", { model: a.model, effort: a.effort });
+          options.aiProvider ?? createAiProvider(process.env.TACET_AI_PROVIDER ?? "anthropic", { model: a.model, effort: a.effort });
         const verified = await ws.verifyChanges(backendDir(a.backendDir), { provider, base: a.base, head: a.head });
-        return report(verified, a.format, "ApiLens: verified API change report");
+        return report(verified, a.format, "Tacet: verified API change report");
       },
     }),
     tool({
@@ -181,7 +181,7 @@ export function createApiLensTools(options: ApiLensToolOptions = {}): ApiLensToo
     }),
     tool({
       name: "search",
-      title: "Search the ApiLens index",
+      title: "Search the Tacet index",
       description: "Search APIs, frontend files, functions, components, DTOs and fields; each hit reports how many APIs and files it touches.",
       parameters: { query: z.string().describe("Case-insensitive substring") },
       readOnly: true,
@@ -206,7 +206,7 @@ export function createApiLensTools(options: ApiLensToolOptions = {}): ApiLensToo
         api: z.string().optional(),
         file: z.string().optional(),
         field: z.string().optional(),
-        outPath: z.string().optional().describe("HTML output path (default .apilens/graph.html)"),
+        outPath: z.string().optional().describe("HTML output path (default .tacet/graph.html)"),
       },
       readOnly: false,
       run: async (a) => {
@@ -219,9 +219,9 @@ export function createApiLensTools(options: ApiLensToolOptions = {}): ApiLensToo
               ? mergeGraphs(analyzer.impactOfField(a.field).map((i) => i.graph))
               : analyzer.fullGraph();
         if (a.format === "mermaid") return { mermaid: renderMermaid(graph) };
-        const out = resolve(a.outPath ?? ".apilens/graph.html");
+        const out = resolve(a.outPath ?? ".tacet/graph.html");
         mkdirSync(dirname(out), { recursive: true });
-        writeFileSync(out, renderHtml(graph, { title: `ApiLens: ${a.api ?? a.file ?? a.field ?? "impact graph"}` }));
+        writeFileSync(out, renderHtml(graph, { title: `Tacet: ${a.api ?? a.file ?? a.field ?? "impact graph"}` }));
         return { path: out, nodes: graph.nodes.length, edges: graph.edges.length };
       },
     }),
@@ -235,13 +235,13 @@ function tool<Shape extends z.ZodRawShape>(definition: {
   parameters: Shape;
   readOnly: boolean;
   run: (args: z.infer<z.ZodObject<Shape>>) => Promise<unknown>;
-}): ApiLensTool {
+}): TacetTool {
   return {
     ...definition,
     parameters: z.object(definition.parameters),
     // Always reject asynchronously, even when argument defaults are missing.
     run: async (args: z.infer<z.ZodObject<Shape>>) => definition.run(args),
-  } as unknown as ApiLensTool;
+  } as unknown as TacetTool;
 }
 
 function report(value: ChangeReport | VerifiedChangeReport, format: "json" | "markdown", title?: string) {

@@ -1,4 +1,4 @@
-import type { ApilensConfig } from "../config.js";
+import type { TacetConfig } from "../config.js";
 import type { ApiCallInfo, BackendManifest, FrontendManifest, PropertyAccessInfo } from "../ir/types.js";
 import { formatAccessPath } from "../path.js";
 import { diffBackends, type ApiChange, type EndpointDiff } from "./diff.js";
@@ -7,7 +7,7 @@ import { ProjectModel } from "./model.js";
 /**
  * - DEFINITE: the frontend provably uses what changed (reads a removed field, calls a removed endpoint)
  * - LIKELY:   it uses it in a way that breaks in common cases (type change, value may now be null)
- * - POSSIBLE: a link exists but ApiLens cannot prove the usage (value passed through an unknown function, unknown request keys)
+ * - POSSIBLE: a link exists but Tacet cannot prove the usage (value passed through an unknown function, unknown request keys)
  */
 export type Confidence = "DEFINITE" | "LIKELY" | "POSSIBLE";
 
@@ -55,7 +55,7 @@ export function analyzeChangeImpact(
   frontend: FrontendManifest,
   before: BackendManifest,
   after: BackendManifest,
-  config: ApilensConfig = {},
+  config: TacetConfig = {},
 ): ChangeReport {
   const model = new ProjectModel(frontend, before, config);
   const callsByEndpoint = new Map<string, ApiCallInfo[]>();
@@ -116,7 +116,7 @@ function impactsOf(
   });
   const readSite = (access: PropertyAccessInfo, confidence: Confidence, reason: string): ImpactSite => ({
     confidence: access.flow === "derived" && confidence !== "POSSIBLE" ? "POSSIBLE" : confidence,
-    reason: access.flow === "derived" ? `${reason} (value passed through a function ApiLens could not follow)` : reason,
+    reason: access.flow === "derived" ? `${reason} (value passed through a function Tacet could not follow)` : reason,
     file: access.file,
     line: access.location.line,
     column: access.location.column,

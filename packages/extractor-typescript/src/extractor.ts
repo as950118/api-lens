@@ -12,13 +12,13 @@ import {
 } from "ts-morph";
 import {
   loadConfig,
-  type ApilensConfig,
+  type TacetConfig,
   type FileInfo,
   type FrontendManifest,
   type LanguageExtractor,
   type PropertyAccessInfo,
   type SourceLocation,
-} from "@apilens/core";
+} from "@tacet/core";
 import {
   DataFlowAnalyzer,
   isFunctionLike,
@@ -31,7 +31,7 @@ const MAX_CODE_LENGTH = 200;
 
 export interface TypeScriptExtractOptions {
   configPath?: string;
-  config?: ApilensConfig;
+  config?: TacetConfig;
 }
 
 export class TypeScriptExtractor implements LanguageExtractor<FrontendManifest> {
@@ -44,7 +44,7 @@ export class TypeScriptExtractor implements LanguageExtractor<FrontendManifest> 
 
 export function extractTypeScriptManifest(
   rootDir: string,
-  config: ApilensConfig = {},
+  config: TacetConfig = {},
 ): FrontendManifest {
   return TypeScriptProject.load(rootDir, config).extract();
 }
@@ -58,10 +58,10 @@ export class TypeScriptProject {
   private constructor(
     readonly root: string,
     private readonly project: Project,
-    private readonly config: ApilensConfig,
+    private readonly config: TacetConfig,
   ) {}
 
-  static load(rootDir: string, config: ApilensConfig = {}): TypeScriptProject {
+  static load(rootDir: string, config: TacetConfig = {}): TypeScriptProject {
     const root = resolve(rootDir);
     return new TypeScriptProject(root, loadProject(root), config);
   }
@@ -86,7 +86,7 @@ export class TypeScriptProject {
   }
 }
 
-function extractFrom(root: string, files: SourceFile[], config: ApilensConfig): FrontendManifest {
+function extractFrom(root: string, files: SourceFile[], config: TacetConfig): FrontendManifest {
   const rel = (sf: SourceFile): string => relative(root, sf.getFilePath()).split(sep).join("/");
 
   const locationOf = (node: Node): SourceLocation => ({

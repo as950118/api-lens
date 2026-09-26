@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.github.heonjinjeong"
-description = "Run ApiLens in Gradle builds: find frontend code broken by backend API changes"
+description = "Run Tacet in Gradle builds: find frontend code broken by backend API changes"
 
 repositories {
     mavenCentral()
@@ -23,13 +23,13 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 // The runner is shared with the Maven plugin as source, not as a separate artifact.
-val generateVersion = tasks.register("generateApilensVersion") {
-    val out = layout.buildDirectory.dir("generated/apilens")
+val generateVersion = tasks.register("generateTacetVersion") {
+    val out = layout.buildDirectory.dir("generated/tacet")
     val pluginVersion = project.version.toString()
     inputs.property("version", pluginVersion)
     outputs.dir(out)
     doLast {
-        val file = out.get().file("io/github/heonjinjeong/apilens/runner/apilens.properties").asFile
+        val file = out.get().file("io/github/heonjinjeong/tacet/runner/tacet.properties").asFile
         file.parentFile.mkdirs()
         file.writeText("version=$pluginVersion\n")
     }
@@ -40,13 +40,13 @@ sourceSets.main {
 }
 
 gradlePlugin {
-    website = "https://github.com/heonjinjeong/api-lens"
-    vcsUrl = "https://github.com/heonjinjeong/api-lens"
+    website = "https://github.com/heonjinjeong/tacet"
+    vcsUrl = "https://github.com/heonjinjeong/tacet"
     plugins {
-        create("apilens") {
-            id = "io.github.heonjinjeong.apilens"
-            implementationClass = "io.github.heonjinjeong.apilens.gradle.ApilensPlugin"
-            displayName = "ApiLens"
+        create("tacet") {
+            id = "io.github.heonjinjeong.tacet"
+            implementationClass = "io.github.heonjinjeong.tacet.gradle.TacetPlugin"
+            displayName = "Tacet"
             description = project.description
             tags = listOf("api", "breaking-changes", "contract-testing", "spring-boot", "typescript", "static-analysis")
         }
@@ -61,7 +61,7 @@ signing {
 
 tasks.test {
     useJUnitPlatform()
-    systemProperty("apilens.repo", rootDir.resolve("../..").canonicalPath)
+    systemProperty("tacet.repo", rootDir.resolve("../..").canonicalPath)
 }
 
 tasks.javadoc {

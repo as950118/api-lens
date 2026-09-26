@@ -1,19 +1,19 @@
-# Releasing ApiLens
+# Releasing Tacet
 
 한 번의 태그 push로 네 곳에 게시된다.
 
 | 레지스트리 | 산출물 | 이름 |
 |---|---|---|
-| npm | 6개 패키지 | `@apilens/core`, `@apilens/extractor-typescript`, `@apilens/extractor-java`(JAR 포함), `@apilens/ai-anthropic`, `@apilens/cli`, `@apilens/mcp` |
-| PyPI | wheel + sdist | `api-lens` (import `apilens`) |
-| Maven Central | Maven 플러그인 | `io.github.heonjinjeong:apilens-maven-plugin` |
-| Gradle Plugin Portal | Gradle 플러그인 | `io.github.heonjinjeong.apilens` |
+| npm | 6개 패키지 | `@tacet/core`, `@tacet/extractor-typescript`, `@tacet/extractor-java`(JAR 포함), `@tacet/ai-anthropic`, `@tacet/cli`, `@tacet/mcp` |
+| PyPI | wheel + sdist | `tacet` (import `tacet`) |
+| Maven Central | Maven 플러그인 | `io.github.heonjinjeong:tacet-maven-plugin` |
+| Gradle Plugin Portal | Gradle 플러그인 | `io.github.heonjinjeong.tacet` |
 
 ## 최초 1회 설정
 
-1. **GitHub 저장소**: `https://github.com/heonjinjeong/api-lens` (패키지 메타데이터의 repository/scm URL. 다르면 모든 package.json, pom.xml, build.gradle.kts, pyproject.toml의 URL을 바꾼다.)
-2. **npm**: npmjs.com에서 organization `apilens` 생성(`@apilens` scope) → Automation 토큰 발급 → 저장소 secret `NPM_TOKEN`.
-3. **PyPI**: pypi.org → Publishing → "Add a new pending publisher": project `api-lens`, owner `heonjinjeong`, repo `api-lens`, workflow `release.yml`, environment `pypi`. GitHub 저장소에 environment `pypi` 생성. 토큰 저장 불필요(trusted publishing).
+1. **GitHub 저장소**: `https://github.com/heonjinjeong/tacet` (패키지 메타데이터의 repository/scm URL. 다르면 모든 package.json, pom.xml, build.gradle.kts, pyproject.toml의 URL을 바꾼다.)
+2. **npm**: npmjs.com에서 organization `tacet` 생성(`@tacet` scope) → Automation 토큰 발급 → 저장소 secret `NPM_TOKEN`.
+3. **PyPI**: pypi.org → Publishing → "Add a new pending publisher": project `tacet`, owner `heonjinjeong`, repo `tacet`, workflow `release.yml`, environment `pypi`. GitHub 저장소에 environment `pypi` 생성. 토큰 저장 불필요(trusted publishing).
 4. **Maven Central**: central.sonatype.com 로그인(GitHub 계정) → namespace `io.github.heonjinjeong` 인증 → User Token 발급 → secret `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`.
 5. **서명 키(GPG)**: `gpg --full-generate-key` → 공개키를 keyserver에 업로드(`gpg --keyserver keyserver.ubuntu.com --send-keys <KEYID>`) → `gpg --armor --export-secret-keys <KEYID>`를 secret `SIGNING_KEY`, 암호를 `SIGNING_PASSWORD`.
 6. **Gradle Plugin Portal**: plugins.gradle.org 로그인(GitHub 계정) → API Keys → secret `GRADLE_PUBLISH_KEY`, `GRADLE_PUBLISH_SECRET`.
